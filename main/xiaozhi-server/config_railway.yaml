@@ -1,0 +1,115 @@
+# Railway用設定ファイル
+# このファイルはRailwayデプロイ用の設定です
+
+server:
+  ip: 0.0.0.0
+  port: 8000
+  http_port: 8003
+  # ローカルテスト用URL
+  websocket: "ws://192.168.2.100:8000/xiaozhi/v1/"
+  vision_explain: "http://192.168.2.100:8003/mcp/vision/explain"
+  timezone_offset: +8
+  auth:
+    enabled: false
+
+log:
+  log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
+  log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
+  log_level: INFO
+  log_dir: tmp
+  log_file: "server.log"
+  data_dir: data
+
+delete_audio: true
+close_connection_no_voice_time: 120
+tts_timeout: 10
+enable_stop_tts_notify: false
+
+exit_commands:
+  - "退出"
+  - "关闭"
+
+xiaozhi:
+  type: hello
+  version: 1
+  transport: websocket
+  audio_params:
+    format: opus
+    sample_rate: 16000
+    channels: 1
+    frame_duration: 60
+
+wakeup_words:
+  - "你好小智"
+  - "嘿你好呀"
+  - "你好小志"
+  - "小爱同学"
+  - "你好小鑫"
+  - "你好小新"
+  - "小美同学"
+  - "小龙小龙"
+  - "喵喵同学"
+  - "小滨小滨"
+  - "小冰小冰"
+
+# 基本的な機能のみ有効化
+selected_module:
+  VAD: WebRTCVAD
+  ASR: FunASR
+  LLM: ChatGLMLLM
+  VLLM: ChatGLMVLLM
+  TTS: EdgeTTS
+  Memory: nomem
+  Intent: function_call
+
+# 無料のLLM設定
+LLM:
+  ChatGLMLLM:
+    type: openai
+    model_name: glm-4-flash
+    url: https://open.bigmodel.cn/api/paas/v4/
+    api_key: ${CHATGLM_API_KEY}  # 環境変数から取得
+
+# 無料のTTS設定
+TTS:
+  EdgeTTS:
+    type: edge
+    voice: zh-CN-XiaoxiaoNeural
+    output_dir: tmp/
+
+# 音声活動検出
+VAD:
+  WebRTCVAD:
+    type: webrtc
+    aggressiveness: 3
+
+# ローカル音声認識
+ASR:
+  FunASR:
+    type: fun_local
+    model_dir: models/SenseVoiceSmall
+    output_dir: tmp/
+
+# 基本的な機能のみ
+Intent:
+  function_call:
+    type: function_call
+    functions:
+      - change_role
+      - get_weather
+      - get_news_from_newsnow
+
+# 記憶機能は無効
+Memory:
+  nomem:
+    type: nomem
+
+# Character setting (Nekota style)
+prompt: "You are nekota, a cute cat girl AI assistant. You have the gentleness and curiosity of a cat, and often use cute cat language like 'nya~' and 'nyan' when speaking."
+
+# プラグイン設定
+plugins:
+  get_weather: {"api_host":"mj7p3y7naa.re.qweatherapi.com", "api_key": "a861d0d5e7bf4ee1a83d9a9e4f96d4da", "default_location": "东京" }
+  get_news_from_newsnow:
+    url: "https://newsnow.busiyi.world/api/s?id="
+    news_sources: "澎湃新闻;百度热搜;财联社"

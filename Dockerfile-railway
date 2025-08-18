@@ -1,0 +1,39 @@
+# Railway用Dockerfile
+FROM python:3.10-slim
+
+WORKDIR /opt/xiaozhi-esp32-server
+
+# システム依存関係のインストール
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    libopus0 \
+    ffmpeg \
+    wget \
+    unzip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python依存関係のインストール
+COPY main/xiaozhi-server/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# アプリケーションコードのコピー
+COPY main/xiaozhi-server .
+
+# 必要なディレクトリの作成
+RUN mkdir -p tmp data models
+
+# 音声認識モデルのダウンロード（FunASR）
+RUN wget -O models/SenseVoiceSmall.zip "https://isv-data.oss-cn-hangzhou.aliyuncs.com/ics/MaaS/ASR/models/SenseVoice/SenseVoiceSmall.zip" && \
+    cd models && \
+    unzip SenseVoiceSmall.zip && \
+    rm SenseVoiceSmall.zip
+
+# Railway用の設定ファイルをコピー
+COPY main/xiaozhi-server/config_railway.yaml config.yaml
+
+# ポート8000を公開
+EXPOSE 8000
+
+# アプリケーション起動
+CMD ["python", "app.py"]
