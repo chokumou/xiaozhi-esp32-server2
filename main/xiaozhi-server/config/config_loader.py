@@ -29,9 +29,12 @@ def load_config():
 
     # 加载默认配置
     default_config = read_config(default_config_path)
-    custom_config = read_config(custom_config_path)
+    # Railway等ではcustomが空でも起動できるようにする
+    custom_config = {}
+    if os.path.exists(custom_config_path):
+        custom_config = read_config(custom_config_path) or {}
 
-    if custom_config.get("manager-api", {}).get("url"):
+    if custom_config.get("manager-api", {}).get("url") and custom_config.get("manager-api", {}).get("secret"):
         config = get_config_from_api(custom_config)
     else:
         # 合并配置
