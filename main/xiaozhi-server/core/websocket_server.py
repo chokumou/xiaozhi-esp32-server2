@@ -138,32 +138,24 @@ class WebSocketServer:
             host = request_headers.get("Host", "localhost")
             scheme = "https"  # RailwayはTLS終端
 
-            if path == "/xiaozhi/ota/":
-                return_json = {
-                    "firmware": {"version": "1.6.8", "url": ""},
-                    "websocket": {"endpoint": f"{scheme}://{host}", "port": 443},
-                    "xiaozhi_websocket": {
-                        "ws_url": f"wss://{host}/xiaozhi/v1/",
-                        "ws_protocol": "xiaozhi-v1",
-                        "protocol_version": 1,
-                        "origin": f"{scheme}://{host}",
-                    },
-                }
-                body = json.dumps(return_json, separators=(",", ":")).encode("utf-8")
-                headers = [
-                    ("Content-Type", "application/json"),
-                    ("Access-Control-Allow-Origin", "*"),
-                    ("Access-Control-Allow-Headers", "*"),
-                    ("Access-Control-Allow-Methods", "GET,POST,OPTIONS"),
-                ]
-                if use_tuple:
-                    return 200, headers, body
-                else:
-                    return await websocket.respond(200, body=body, headers=headers)
-
-            # デフォルトの稼働確認
-            body = b"Server is running\n"
-            headers = [("Content-Type", "text/plain; charset=utf-8")]
+            # どのパスでもヘルス用JSONを返す（Railway/プリフライト用）
+            return_json = {
+                "firmware": {"version": "1.6.8", "url": ""},
+                "websocket": {"endpoint": f"{scheme}://{host}", "port": 443},
+                "xiaozhi_websocket": {
+                    "ws_url": f"wss://{host}/xiaozhi/v1/",
+                    "ws_protocol": "xiaozhi-v1",
+                    "protocol_version": 1,
+                    "origin": f"{scheme}://{host}",
+                },
+            }
+            body = json.dumps(return_json, separators=(",", ":")).encode("utf-8")
+            headers = [
+                ("Content-Type", "application/json"),
+                ("Access-Control-Allow-Origin", "*"),
+                ("Access-Control-Allow-Headers", "*"),
+                ("Access-Control-Allow-Methods", "GET,POST,OPTIONS"),
+            ]
             if use_tuple:
                 return 200, headers, body
             else:
