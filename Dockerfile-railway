@@ -22,13 +22,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main/xiaozhi-server .
 
 # 必要なディレクトリの作成
-RUN mkdir -p tmp data models
+RUN mkdir -p tmp data models && \
+    cp -f config_railway.yaml config.yaml && \
+    cp -f config_from_api.yaml data/.config.yaml || true
 
 # モデル取得は起動時にアプリ側が行うためビルド時は作成のみ（外部配布元の認証エラー回避）
 RUN mkdir -p models/sherpa_sense_voice
 
-# Railway用の設定ファイルをコピー
-COPY main/xiaozhi-server/config_railway.yaml config.yaml
+# Railway用の設定ファイルは上でコピー済み
 
 # ポート8000を公開
 EXPOSE 8000
