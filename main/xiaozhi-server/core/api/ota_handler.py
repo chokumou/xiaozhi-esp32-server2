@@ -50,18 +50,23 @@ class OTAHandler(BaseHandler):
             port = int(server_config.get("port", 8000))
             local_ip = get_local_ip()
 
+            # nekota-serverの形式に合わせてレスポンスを修正
+            websocket_url = self._get_websocket_url(local_ip, port)
             return_json = {
-                "server_time": {
-                    "timestamp": int(round(time.time() * 1000)),
-                    "timezone_offset": server_config.get("timezone_offset", 8) * 60,
-                },
                 "firmware": {
-                    "version": data_json["application"].get("version", "1.0.0"),
+                    "version": data_json["application"].get("version", "1.6.8"),
                     "url": "",
                 },
                 "websocket": {
-                    "url": self._get_websocket_url(local_ip, port),
+                    "endpoint": "https://xiaozhi-esp32-server2-production.up.railway.app",
+                    "port": 443
                 },
+                "xiaozhi_websocket": {
+                    "ws_url": websocket_url,
+                    "ws_protocol": "xiaozhi-v1",
+                    "protocol_version": 1,
+                    "origin": "https://xiaozhi-esp32-server2-production.up.railway.app"
+                }
             }
             response = web.Response(
                 text=json.dumps(return_json, separators=(",", ":")),
@@ -88,16 +93,36 @@ class OTAHandler(BaseHandler):
             self.logger.bind(tag=TAG).info(f"ユーザーエージェント: {request.headers.get('User-Agent', 'N/A')}")
             self.logger.bind(tag=TAG).info(f"全ヘッダー: {dict(request.headers)}")
             
+            # nekota-serverの形式に合わせてレスポンスを修正
             server_config = self.config["server"]
             local_ip = get_local_ip()
             port = int(server_config.get("port", 8000))
             websocket_url = self._get_websocket_url(local_ip, port)
-            message = f"OTA接口运行正常，向设备发送的websocket地址是：{websocket_url}"
             
-            self.logger.bind(tag=TAG).info(f"レスポンス: {message}")
+            return_json = {
+                "firmware": {
+                    "version": "1.6.8",
+                    "url": "",
+                },
+                "websocket": {
+                    "endpoint": "https://xiaozhi-esp32-server2-production.up.railway.app",
+                    "port": 443
+                },
+                "xiaozhi_websocket": {
+                    "ws_url": websocket_url,
+                    "ws_protocol": "xiaozhi-v1",
+                    "protocol_version": 1,
+                    "origin": "https://xiaozhi-esp32-server2-production.up.railway.app"
+                }
+            }
+            
+            self.logger.bind(tag=TAG).info(f"レスポンス: {return_json}")
             self.logger.bind(tag=TAG).info(f"=== OTA GET リクエスト処理完了 ===")
             
-            response = web.Response(text=message, content_type="text/plain")
+            response = web.Response(
+                text=json.dumps(return_json, separators=(",", ":")),
+                content_type="application/json"
+            )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"OTA GET请求异常: {e}")
             response = web.Response(text="OTA接口异常", content_type="text/plain")
