@@ -55,7 +55,7 @@ wakeup_words:
 # 基本的な機能のみ有効化
 selected_module:
   VAD: WebRTCVAD
-  ASR: OpenAIASR
+  ASR: sherpa_onnx_local
   LLM: ChatGLMLLM
   VLLM: ChatGLMVLLM
   TTS: EdgeTTS
@@ -85,11 +85,10 @@ VAD:
 
 # ローカル音声認識
 ASR:
-  OpenAIASR:
-    type: openai
-    base_url: https://api.openai.com/v1/audio/transcriptions
-    model_name: whisper-1
-    api_key: ${OPENAI_API_KEY}
+  sherpa_onnx_local:
+    type: sherpa_onnx_local
+    model_dir: models/sherpa_sense_voice
+    model_type: sense_voice
     output_dir: tmp/
 
 # 基本的な機能のみ
