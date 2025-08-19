@@ -1,3 +1,13 @@
+## Preflight (ローカルでヘルスチェック)
+
+Railwayのデプロイ前に、ローカルで起動/ヘルスチェックを自動実行できます。
+
+```bash
+python preflight_healthcheck.py
+```
+
+成功すると `/xiaozhi/ota/` が200でJSONを返します。失敗時は起動ログ末尾が表示され、原因を即確認できます。
+
 [![Banners](docs/images/banner1.png)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
 <h1 align="center">小智后端服务xiaozhi-esp32-server</h1>
