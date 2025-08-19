@@ -19,10 +19,11 @@ class WebSocketServer:
         # Railwayでは起動を速くするためASRは遅延初期化
         on_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_ENVIRONMENT"))
         init_asr_now = not on_railway
+        init_vad_now = not on_railway
         modules = initialize_modules(
             self.logger,
             self.config,
-            "VAD" in self.config["selected_module"],
+            ("VAD" in self.config["selected_module"]) and init_vad_now,
             init_asr_now,
             "LLM" in self.config["selected_module"],
             False,
@@ -52,6 +53,21 @@ class WebSocketServer:
             if "asr" in modules:
                 self._asr = modules["asr"]
 
+    def _ensure_vad_initialized(self):
+        if self._vad is None:
+            modules = initialize_modules(
+                self.logger,
+                self.config,
+                True,
+                False,
+                False,
+                False,
+                False,
+                False,
+            )
+            if "vad" in modules:
+                self._vad = modules["vad"]
+
     async def start(self):
         server_config = self.config["server"]
         host = server_config.get("ip", "0.0.0.0")
@@ -67,7 +83,7 @@ class WebSocketServer:
         # 创建ConnectionHandler时传入当前server实例
         handler = ConnectionHandler(
             self.config,
-            self._vad,
+            (self._vad or (self._ensure_vad_initialized() or self._vad)),
             (self._asr or (self._ensure_asr_initialized() or self._asr)),
             self._llm,
             self._memory,
