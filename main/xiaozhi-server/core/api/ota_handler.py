@@ -24,7 +24,8 @@ class OTAHandler(BaseHandler):
         server_config = self.config["server"]
         websocket_config = server_config.get("websocket", "")
 
-        if "你的" not in websocket_config:
+        # Railway環境では設定されたWebSocket URLを使用
+        if websocket_config and "你的" not in websocket_config and websocket_config.strip():
             return websocket_config
         else:
             return f"ws://{local_ip}:{port}/xiaozhi/v1/"

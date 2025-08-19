@@ -4,9 +4,13 @@ server:
   ip: 0.0.0.0
   port: 8000
   http_port: 8000
+  # Railway用のWebSocket URL
+  websocket: wss://xiaozhi-esp32-server2-production.up.railway.app/xiaozhi/v1/
   timezone_offset: +8
   auth:
     enabled: false
+  # デバッグ用：設定ファイル読み込み確認
+  debug: true
 
 log:
   log_level: INFO
