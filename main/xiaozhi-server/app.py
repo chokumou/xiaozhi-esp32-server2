@@ -44,7 +44,12 @@ async def monitor_stdin():
 
 async def main():
     check_ffmpeg_installed()
-    config = load_config()
+    # Railway環境ではconfig_railway.yamlを使用
+    import os
+    if os.getenv('RAILWAY_ENVIRONMENT'):
+        config = load_config('config_railway.yaml')
+    else:
+        config = load_config()
 
     # 默认使用manager-api的secret作为auth_key
     # 如果secret为空，则生成随机密钥

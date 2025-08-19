@@ -1,20 +1,14 @@
-# Railway用設定ファイル
-# このファイルはRailwayデプロイ用の設定です
+# Railway本番環境用設定ファイル
 
 server:
   ip: 0.0.0.0
   port: 8000
-  http_port: 8003
-  # ローカルテスト用URL
-  websocket: "ws://192.168.2.100:8000/xiaozhi/v1/"
-  vision_explain: "http://192.168.2.100:8003/mcp/vision/explain"
+  http_port: 8000
   timezone_offset: +8
   auth:
     enabled: false
 
 log:
-  log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
-  log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
   log_level: INFO
   log_dir: tmp
   log_file: "server.log"
@@ -62,13 +56,13 @@ selected_module:
   Memory: nomem
   Intent: function_call
 
-# 無料のLLM設定
+# 無料のLLM設定（APIキーは環境変数から取得）
 LLM:
   ChatGLMLLM:
     type: openai
     model_name: glm-4-flash
     url: https://open.bigmodel.cn/api/paas/v4/
-    api_key: ${CHATGLM_API_KEY}  # 環境変数から取得
+    api_key: ${CHATGLM_API_KEY}
 
 # 無料のTTS設定
 TTS:
