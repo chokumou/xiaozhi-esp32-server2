@@ -6,6 +6,7 @@ from core.connection import ConnectionHandler
 from config.config_loader import get_config_from_api
 from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
+import os
 
 TAG = __name__
 
@@ -15,11 +16,14 @@ class WebSocketServer:
         self.config = config
         self.logger = setup_logging()
         self.config_lock = asyncio.Lock()
+        # Railwayでは起動を速くするためASRは遅延初期化
+        on_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_ENVIRONMENT"))
+        init_asr_now = not on_railway
         modules = initialize_modules(
             self.logger,
             self.config,
             "VAD" in self.config["selected_module"],
-            "ASR" in self.config["selected_module"],
+            init_asr_now,
             "LLM" in self.config["selected_module"],
             False,
             "Memory" in self.config["selected_module"],
@@ -32,6 +36,21 @@ class WebSocketServer:
         self._memory = modules["memory"] if "memory" in modules else None
 
         self.active_connections = set()
+
+    def _ensure_asr_initialized(self):
+        if self._asr is None:
+            modules = initialize_modules(
+                self.logger,
+                self.config,
+                False,
+                True,
+                False,
+                False,
+                False,
+                False,
+            )
+            if "asr" in modules:
+                self._asr = modules["asr"]
 
     async def start(self):
         server_config = self.config["server"]
@@ -49,7 +68,7 @@ class WebSocketServer:
         handler = ConnectionHandler(
             self.config,
             self._vad,
-            self._asr,
+            (self._asr or (self._ensure_asr_initialized() or self._asr)),
             self._llm,
             self._memory,
             self._intent,
