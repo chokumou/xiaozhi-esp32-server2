@@ -12,6 +12,7 @@ import numpy as np
 import sherpa_onnx
 
 from modelscope.hub.file_download import model_file_download
+import requests
 
 TAG = __name__
 logger = setup_logging()
@@ -52,16 +53,28 @@ class ASRProvider(ASRProviderBase):
             "tokens.txt": os.path.join(self.model_dir, "tokens.txt"),
         }
 
-        # 下载并检查模型文件
+        # 下载并检查模型文件（起動時に未存在なら公開ミラーから取得／失敗時はmodelscopeを試行）
         try:
             for file_name, file_path in model_files.items():
                 if not os.path.isfile(file_path):
-                    logger.bind(tag=TAG).info(f"正在下载模型文件: {file_name}")
-                    model_file_download(
-                        model_id="pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
-                        file_path=file_name,
-                        local_dir=self.model_dir,
-                    )
+                    logger.bind(tag=TAG).info(f"下载模型文件: {file_name}")
+                    try:
+                        url_map = {
+                            "model.int8.onnx": "https://raw.githubusercontent.com/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/main/model.int8.onnx",
+                            "tokens.txt": "https://raw.githubusercontent.com/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/main/tokens.txt",
+                        }
+                        os.makedirs(self.model_dir, exist_ok=True)
+                        with requests.get(url_map[file_name], timeout=60) as r:
+                            r.raise_for_status()
+                            with open(file_path, "wb") as f:
+                                f.write(r.content)
+                    except Exception:
+                        # フォールバック: modelscopeから取得
+                        model_file_download(
+                            model_id="pengzhendong/sherpa-onnx-sense-voice-zh-en-ja-ko-yue",
+                            file_path=file_name,
+                            local_dir=self.model_dir,
+                        )
 
                     if not os.path.isfile(file_path):
                         raise FileNotFoundError(f"模型文件下载失败: {file_path}")

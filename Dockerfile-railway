@@ -24,10 +24,8 @@ COPY main/xiaozhi-server .
 # 必要なディレクトリの作成
 RUN mkdir -p tmp data models
 
-# モデルをGitHubリリース等から取得（403回避）
-RUN mkdir -p models/sherpa_sense_voice && \
-    wget -O models/sherpa_sense_voice/model.int8.onnx "https://huggingface.co/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/resolve/main/model.int8.onnx?download=true" && \
-    wget -O models/sherpa_sense_voice/tokens.txt "https://huggingface.co/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/resolve/main/tokens.txt?download=true"
+# モデル取得は起動時にアプリ側が行うためビルド時は作成のみ（外部配布元の認証エラー回避）
+RUN mkdir -p models/sherpa_sense_voice
 
 # Railway用の設定ファイルをコピー
 COPY main/xiaozhi-server/config_railway.yaml config.yaml
