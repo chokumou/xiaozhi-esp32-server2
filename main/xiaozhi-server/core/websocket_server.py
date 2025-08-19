@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+import json
 from config.logger import setup_logging
 from core.connection import ConnectionHandler
 from config.config_loader import get_config_from_api
@@ -77,14 +78,46 @@ class WebSocketServer:
                     f"服务器端强制关闭连接时出错: {close_error}"
                 )
 
-    async def _http_response(self, websocket, request_headers):
-        # 检查是否为 WebSocket 升级请求
-        if request_headers.headers.get("connection", "").lower() == "upgrade":
-            # 如果是 WebSocket 请求，返回 None 允许握手继续
-            return None
-        else:
-            # 如果是普通 HTTP 请求，返回 "server is running"
-            return websocket.respond(200, "Server is running\n")
+    async def _http_response(self, path, request_headers):
+        # 非WSのHTTPヘルスチェック/OTA応答をここで返す
+        # WebSocketハンドシェイク以外のリクエストはここに来る
+        try:
+            connection_hdr = request_headers.get("Connection", "").lower()
+            upgrade_hdr = request_headers.get("Upgrade", "").lower()
+            if "upgrade" in connection_hdr or upgrade_hdr == "websocket":
+                return None  # WSはそのまま続行
+
+            host = request_headers.get("Host", "localhost")
+            scheme = "https"  # RailwayはTLS終端
+
+            if path == "/xiaozhi/ota/":
+                return_json = {
+                    "firmware": {"version": "1.6.8", "url": ""},
+                    "websocket": {"endpoint": f"{scheme}://{host}", "port": 443},
+                    "xiaozhi_websocket": {
+                        "ws_url": f"wss://{host}/xiaozhi/v1/",
+                        "ws_protocol": "xiaozhi-v1",
+                        "protocol_version": 1,
+                        "origin": f"{scheme}://{host}",
+                    },
+                }
+                body = json.dumps(return_json, separators=(",", ":")).encode("utf-8")
+                headers = [
+                    ("Content-Type", "application/json"),
+                    ("Access-Control-Allow-Origin", "*"),
+                    ("Access-Control-Allow-Headers", "*"),
+                    ("Access-Control-Allow-Methods", "GET,POST,OPTIONS"),
+                ]
+                return 200, headers, body
+
+            # デフォルトの稼働確認
+            body = b"Server is running\n"
+            headers = [("Content-Type", "text/plain; charset=utf-8")]
+            return 200, headers, body
+        except Exception:
+            body = b"Internal Server Error\n"
+            headers = [("Content-Type", "text/plain; charset=utf-8")]
+            return 500, headers, body
 
     async def update_config(self) -> bool:
         """更新服务器配置并重新初始化组件
