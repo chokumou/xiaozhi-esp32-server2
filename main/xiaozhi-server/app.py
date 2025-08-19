@@ -3,6 +3,7 @@ import uuid
 import signal
 import asyncio
 from aioconsole import ainput
+import os
 from config.settings import load_config
 from config.logger import setup_logging
 from core.utils.util import get_local_ip, validate_mcp_endpoint
@@ -44,19 +45,19 @@ async def monitor_stdin():
 
 async def main():
     check_ffmpeg_installed()
-    # Railway環境ではconfig_railway.yamlを使用
-    import os
-    # Railway環境の判定（Railwayの自動設定環境変数を使用）
-    railway_project_id = os.getenv('RAILWAY_PROJECT_ID')
-    railway_env = os.getenv('RAILWAY_ENVIRONMENT')
-    
-    if railway_project_id or (railway_env and railway_env in ['true', 'production']):
-        logger.bind(tag=TAG).info(f"=== Railway環境を検出(project_id: {railway_project_id}, env: {railway_env})、config_railway.yamlを使用 ===")
-        config = load_config('config_railway.yaml')
-        logger.bind(tag=TAG).info(f"設定ファイル読み込み完了: {config.get('server', {}).get('debug', 'N/A')}")
-    else:
-        logger.bind(tag=TAG).info("=== ローカル環境、デフォルト設定を使用 ===")
-        config = load_config()
+    config = load_config()
+
+    # Railway 環境では単一ポート($PORT)のみ公開されるため、WebSocketサーバーをそのポートで起動し、
+    # HTTPヘルスチェック/OTAはwebsocketsのprocess_requestで応答する。
+    railway_project_id = os.getenv("RAILWAY_PROJECT_ID")
+    railway_env = os.getenv("RAILWAY_ENVIRONMENT")
+    on_railway = bool(railway_project_id or railway_env)
+    if on_railway:
+        port_env = int(os.getenv("PORT", config.get("server", {}).get("port", 8000)))
+        config.setdefault("server", {})
+        config["server"]["port"] = port_env
+        # http_portは使用しない（同一ポート重複バインドを避ける）
+        config["server"]["http_port"] = port_env
 
     # 默认使用manager-api的secret作为auth_key
     # 如果secret为空，则生成随机密钥
@@ -69,26 +70,28 @@ async def main():
     # 添加 stdin 监控任务
     stdin_task = asyncio.create_task(monitor_stdin())
 
-    # 启动 WebSocket 服务器
+    # 启动 WebSocket 服务器（Railwayでも$PORTで起動）
     ws_server = WebSocketServer(config)
     ws_task = asyncio.create_task(ws_server.start())
-    # 启动 Simple http 服务器
-    ota_server = SimpleHttpServer(config)
-    ota_task = asyncio.create_task(ota_server.start())
+    # 启动 Simple http 服务器（Railwayでは起動しない）
+    ota_task = None
+    if not on_railway:
+        ota_server = SimpleHttpServer(config)
+        ota_task = asyncio.create_task(ota_server.start())
 
     read_config_from_api = config.get("read_config_from_api", False)
     port = int(config["server"].get("http_port", 8003))
-    if not read_config_from_api:
+    if not read_config_from_api and not on_railway:
         logger.bind(tag=TAG).info(
             "OTA接口是\t\thttp://{}:{}/xiaozhi/ota/",
             get_local_ip(),
             port,
         )
-    logger.bind(tag=TAG).info(
-        "视觉分析接口是\thttp://{}:{}/mcp/vision/explain",
-        get_local_ip(),
-        port,
-    )
+        logger.bind(tag=TAG).info(
+            "视觉分析接口是\thttp://{}:{}/mcp/vision/explain",
+            get_local_ip(),
+            port,
+        )
     mcp_endpoint = config.get("mcp_endpoint", None)
     if mcp_endpoint is not None and "你" not in mcp_endpoint:
         # 校验MCP接入点格式
