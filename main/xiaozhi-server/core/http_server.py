@@ -65,6 +65,28 @@ class SimpleHttpServer:
                     web.options("/mcp/vision/explain", self.vision_handler.handle_post),
                 ]
             )
+            
+            # デバッグ用ルート追加
+            self.logger.bind(tag=TAG).info("デバッグルートを追加: /debug/routes")
+            async def debug_routes(request):
+                routes_list = []
+                for route in app.router.routes():
+                    routes_list.append({
+                        "method": route.method,
+                        "path": route.resource.canonical,
+                        "handler": str(route.handler)
+                    })
+                return web.json_response(routes_list)
+            
+            app.add_routes([
+                web.get("/debug/routes", debug_routes)
+            ])
+
+            # 登録済みルートをログ出力
+            self.logger.bind(tag=TAG).info("=== 登録済みルート一覧 ===")
+            for route in app.router.routes():
+                self.logger.bind(tag=TAG).info(f"ルート: {route.method} {route.resource.canonical}")
+            self.logger.bind(tag=TAG).info("=== ルート一覧終了 ===")
 
             # 运行服务
             runner = web.AppRunner(app)
