@@ -46,8 +46,9 @@ async def main():
     check_ffmpeg_installed()
     # Railway環境ではconfig_railway.yamlを使用
     import os
-    if os.getenv('RAILWAY_ENVIRONMENT'):
-        logger.bind(tag=TAG).info("=== Railway環境を検出、config_railway.yamlを使用 ===")
+    railway_env = os.getenv('RAILWAY_ENVIRONMENT')
+    if railway_env and railway_env in ['true', 'production']:
+        logger.bind(tag=TAG).info(f"=== Railway環境を検出({railway_env})、config_railway.yamlを使用 ===")
         config = load_config('config_railway.yaml')
         logger.bind(tag=TAG).info(f"設定ファイル読み込み完了: {config.get('server', {}).get('debug', 'N/A')}")
     else:
