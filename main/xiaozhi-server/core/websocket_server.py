@@ -113,7 +113,20 @@ class WebSocketServer:
                     f"服务器端强制关闭连接时出错: {close_error}"
                 )
 
-    async def _http_response(self, path, request_headers):
+    async def _http_response(self, *args, **kwargs):
+        # Support websockets process_request signatures across versions:
+        # - (path, request_headers)
+        # - (websocket, request_headers) with websocket.respond(...)
+        if len(args) >= 2 and isinstance(args[0], str):
+            path = args[0]
+            request_headers = args[1]
+            use_tuple = True
+        else:
+            websocket = args[0]
+            request_headers = args[1]
+            # derive path if available
+            path = kwargs.get("path", "/")
+            use_tuple = False
         # 非WSのHTTPヘルスチェック/OTA応答をここで返す
         # WebSocketハンドシェイク以外のリクエストはここに来る
         try:
@@ -143,16 +156,25 @@ class WebSocketServer:
                     ("Access-Control-Allow-Headers", "*"),
                     ("Access-Control-Allow-Methods", "GET,POST,OPTIONS"),
                 ]
-                return 200, headers, body
+                if use_tuple:
+                    return 200, headers, body
+                else:
+                    return await websocket.respond(200, body=body, headers=headers)
 
             # デフォルトの稼働確認
             body = b"Server is running\n"
             headers = [("Content-Type", "text/plain; charset=utf-8")]
-            return 200, headers, body
+            if use_tuple:
+                return 200, headers, body
+            else:
+                return await websocket.respond(200, body=body, headers=headers)
         except Exception:
             body = b"Internal Server Error\n"
             headers = [("Content-Type", "text/plain; charset=utf-8")]
-            return 500, headers, body
+            if use_tuple:
+                return 500, headers, body
+            else:
+                return await websocket.respond(500, body=body, headers=headers)
 
     async def update_config(self) -> bool:
         """更新服务器配置并重新初始化组件
