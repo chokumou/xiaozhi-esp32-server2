@@ -83,8 +83,8 @@ class SimpleHttpServer:
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
 
             async def ws_handler(request: web.Request):
-                # Agree on subprotocols
-                ws = web.WebSocketResponse(protocols=["v1", "xiaozhi-v1"])
+                # Agree on subprotocols; send periodic ping to keep Railway edge alive
+                ws = web.WebSocketResponse(protocols=["v1", "xiaozhi-v1"], heartbeat=10)
                 await ws.prepare(request)
 
                 # Initialize modules lazily (avoid heavy startup)
