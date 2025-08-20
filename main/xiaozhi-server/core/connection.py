@@ -170,20 +170,24 @@ class ConnectionHandler:
                 # 尝试从 URL 的查询参数中获取 device-id
                 from urllib.parse import parse_qs, urlparse
 
-                # 从 WebSocket 请求中获取路径
-                request_path = ws.request.path
-                if not request_path:
-                    self.logger.bind(tag=TAG).error("无法获取请求路径")
-                    return
-                parsed_url = urlparse(request_path)
-                query_params = parse_qs(parsed_url.query)
-                if "device-id" in query_params:
-                    self.headers["device-id"] = query_params["device-id"][0]
-                    self.headers["client-id"] = query_params["client-id"][0]
-                else:
-                    await ws.send("端口正常，如需测试连接，请使用test_page.html")
-                    await self.close(ws)
-                    return
+                request_path = getattr(ws.request, "path", "") or getattr(ws.request, "path_qs", "")
+                device_id = None
+                client_id = None
+                if request_path:
+                    parsed_url = urlparse(request_path)
+                    query_params = parse_qs(parsed_url.query)
+                    device_id = (query_params.get("device-id") or [None])[0]
+                    client_id = (query_params.get("client-id") or [None])[0]
+
+                # 如果仍然没有，放宽校验，自动生成ID，避免立即断开
+                if device_id is None:
+                    device_id = f"unknown-{uuid.uuid4().hex[:8]}"
+                if client_id is None:
+                    client_id = device_id
+
+                self.headers["device-id"] = device_id
+                self.headers["client-id"] = client_id
+                self.logger.bind(tag=TAG).info(f"缺少device-id，已自动分配: {device_id}")
             real_ip = self.headers.get("x-real-ip") or self.headers.get(
                 "x-forwarded-for"
             )
