@@ -26,9 +26,8 @@ RUN mkdir -p tmp data /opt/models/sherpa_sense_voice && \
     cp -f config_railway.yaml config.yaml && \
     /bin/sh -lc 'printf "manager-api:\n  url: \"\"\n  secret: \"\"\n" > data/.config.yaml'
 
-# 起動時にエントリポイントでモデルを取得（複数ミラー+リトライ）
-COPY main/xiaozhi-server/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+## 以前は起動時にエントリポイントでモデルを取得していたが、
+## 現在はクラウドASR/LLM/TTSを使用するため不要
 
 # Railway用の設定ファイルは上でコピー済み
 
@@ -36,4 +35,4 @@ RUN chmod +x ./entrypoint.sh
 EXPOSE 8000
 
 # アプリケーション起動
-ENTRYPOINT ["/opt/xiaozhi-esp32-server/entrypoint.sh"]
+CMD ["python", "app.py"]
