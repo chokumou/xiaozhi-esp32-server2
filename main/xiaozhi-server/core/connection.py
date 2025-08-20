@@ -288,8 +288,6 @@ class ConnectionHandler:
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
-            if self.vad is None:
-                return
             if self.asr is None:
                 return
             self.asr_audio_queue.put(message)

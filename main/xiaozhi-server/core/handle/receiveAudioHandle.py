@@ -13,7 +13,21 @@ TAG = __name__
 
 async def handleAudioMessage(conn, audio):
     # 当前片段是否有人说话
-    have_voice = conn.vad.is_vad(conn, audio)
+    # 当VAD缺失时，退化为按listen状态控制：start中视为有声，detect/stop时视静音
+    if getattr(conn, "vad", None) is None:
+        have_voice = conn.client_have_voice
+        # 在无VAD时仍累计音频帧
+        conn.asr_audio.append(audio)
+        # 如果停止标记已到达，强制走一轮ASR
+        if conn.client_voice_stop:
+            asr_audio_task = conn.asr_audio.copy()
+            conn.asr_audio.clear()
+            conn.reset_vad_states()
+            if len(asr_audio_task) > 10:
+                await conn.asr.handle_voice_stop(conn, asr_audio_task)
+        return
+    else:
+        have_voice = conn.vad.is_vad(conn, audio)
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
