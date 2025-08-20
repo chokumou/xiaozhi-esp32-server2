@@ -13,8 +13,11 @@ TAG = __name__
 
 async def handleAudioMessage(conn, audio):
     # 当前片段是否有人说话
-    # 原実装に沿ってVADで判定
-    have_voice = conn.vad.is_vad(conn, audio)
+    # 原実装に沿ってVADで判定（但しVAD未就绪时先按listen状态处理，避免报错）
+    if getattr(conn, "vad", None) is None:
+        have_voice = conn.client_have_voice
+    else:
+        have_voice = conn.vad.is_vad(conn, audio)
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
