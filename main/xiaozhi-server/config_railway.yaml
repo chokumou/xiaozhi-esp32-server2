@@ -54,26 +54,26 @@ wakeup_words:
 # 基本的な機能のみ有効化
 selected_module:
   VAD: WebRTCVAD
-  ASR: sherpa_onnx_local
-  LLM: ChatGLMLLM
+  ASR: OpenAIASR
+  LLM: OpenAILLM
   VLLM: ChatGLMVLLM
-  TTS: EdgeTTS
+  TTS: OpenAITTS
   Memory: nomem
   Intent: function_call
 
-# 無料のLLM設定
+# LLM設定（OpenAI）
 LLM:
-  ChatGLMLLM:
+  OpenAILLM:
     type: openai
-    model_name: glm-4-flash
-    url: https://open.bigmodel.cn/api/paas/v4/
-    api_key: ${CHATGLM_API_KEY}  # 環境変数から取得
+    model_name: gpt-4o-mini
+    url: https://api.openai.com/v1/
+    api_key: ${OPENAI_API_KEY}
 
-# 無料のTTS設定
+# TTS設定（OpenAI）
 TTS:
-  EdgeTTS:
-    type: edge
-    voice: zh-CN-XiaoxiaoNeural
+  OpenAITTS:
+    type: openai
+    voice: alloy
     output_dir: tmp/
 
 # 音声活動検出
@@ -83,12 +83,13 @@ VAD:
     aggressiveness: 3
     min_silence_duration_ms: 800
 
-# ローカル音声認識
+# 音声認識（OpenAI Whisper API）
 ASR:
-  sherpa_onnx_local:
-    type: sherpa_onnx_local
-    model_dir: /opt/models/sherpa_sense_voice
-    model_type: sense_voice
+  OpenAIASR:
+    type: openai
+    base_url: https://api.openai.com/v1/audio/transcriptions
+    model_name: whisper-1
+    api_key: ${OPENAI_API_KEY}
     output_dir: tmp/
 
 # 基本的な機能のみ
