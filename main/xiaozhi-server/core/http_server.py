@@ -84,7 +84,7 @@ class SimpleHttpServer:
 
             async def ws_handler(request: web.Request):
                 # Agree on subprotocols; send periodic ping to keep Railway edge alive
-                ws = web.WebSocketResponse(protocols=["v1", "xiaozhi-v1"], heartbeat=10)
+                ws = web.WebSocketResponse(protocols=["v1", "xiaozhi-v1"], heartbeat=5)
                 await ws.prepare(request)
 
                 # Initialize modules lazily (avoid heavy startup)
