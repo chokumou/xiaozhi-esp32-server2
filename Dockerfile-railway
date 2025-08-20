@@ -8,7 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libopus0 \
     ffmpeg \
-    wget \
+    curl \
     unzip \
     git \
     && apt-get clean \
@@ -26,12 +26,9 @@ RUN mkdir -p tmp data /opt/models/sherpa_sense_voice && \
     cp -f config_railway.yaml config.yaml && \
     /bin/sh -lc 'printf "manager-api:\n  url: \"\"\n  secret: \"\"\n" > data/.config.yaml'
 
-# ASRモデルをイメージに同梱（起動時DLゼロ）
-RUN set -eux; \
-    wget -O /opt/models/sherpa_sense_voice/model.int8.onnx \
-      https://raw.githubusercontent.com/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/main/model.int8.onnx; \
-    wget -O /opt/models/sherpa_sense_voice/tokens.txt \
-      https://raw.githubusercontent.com/pdzsonline/sherpa-onnx-sense-voice-zh-en-ja-ko-yue/main/tokens.txt
+# 起動時にエントリポイントでモデルを取得（複数ミラー+リトライ）
+COPY main/xiaozhi-server/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Railway用の設定ファイルは上でコピー済み
 
@@ -39,4 +36,4 @@ RUN set -eux; \
 EXPOSE 8000
 
 # アプリケーション起動
-CMD ["python", "app.py"]
+ENTRYPOINT ["/opt/xiaozhi-esp32-server/entrypoint.sh"]
