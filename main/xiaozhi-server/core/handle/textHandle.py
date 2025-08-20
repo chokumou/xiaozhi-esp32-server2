@@ -40,7 +40,14 @@ async def handleTextMessage(conn, message):
                 conn.client_have_voice = True
                 conn.client_voice_stop = True
                 if len(conn.asr_audio) > 0:
-                    await handleAudioMessage(conn, b"")
+                    # 如果未初始化VAD，则直接触发一次语音停止处理，避免卡在listening
+                    if getattr(conn, "vad", None) is None:
+                        asr_audio_task = conn.asr_audio.copy()
+                        conn.asr_audio.clear()
+                        conn.reset_vad_states()
+                        await conn.asr.handle_voice_stop(conn, asr_audio_task)
+                    else:
+                        await handleAudioMessage(conn, b"")
             elif msg_json["state"] == "detect":
                 conn.client_have_voice = False
                 conn.asr_audio.clear()
