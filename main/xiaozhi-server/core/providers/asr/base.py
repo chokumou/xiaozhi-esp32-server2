@@ -70,10 +70,6 @@ class ASRProviderBase(ABC):
 
             if len(asr_audio_task) > 15:
                 await self.handle_voice_stop(conn, asr_audio_task)
-            else:
-                logger.bind(tag=TAG).info(
-                    f"语音段过短，丢弃。本段帧数: {len(asr_audio_task)}"
-                )
 
     # 处理语音停止
     async def handle_voice_stop(self, conn, asr_audio_task: List[bytes]):

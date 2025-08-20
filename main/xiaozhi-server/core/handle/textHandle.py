@@ -4,7 +4,7 @@ from core.handle.abortHandle import handleAbortMessage
 from core.handle.helloHandle import handleHelloMessage
 from core.providers.tools.device_mcp import handle_mcp_message
 from core.utils.util import remove_punctuation_and_length, filter_sensitive_info
-from core.handle.receiveAudioHandle import startToChat, handleAudioMessage, _auto_stop_if_needed
+from core.handle.receiveAudioHandle import startToChat, handleAudioMessage
 from core.providers.tools.device_iot import handleIotDescriptors, handleIotStatus
 from core.handle.reportHandle import enqueue_asr_report
 import asyncio
@@ -36,29 +36,13 @@ async def handleTextMessage(conn, message):
             if msg_json["state"] == "start":
                 conn.client_have_voice = True
                 conn.client_voice_stop = False
-                # 无VAD时，启动自动停止定时器（避免一直停在listening）
-                if getattr(conn, "vad", None) is None:
-                    try:
-                        if getattr(conn, "auto_stop_task", None) and not conn.auto_stop_task.done():
-                            conn.auto_stop_task.cancel()
-                    except Exception:
-                        pass
-                    conn.auto_stop_task = asyncio.create_task(_auto_stop_if_needed(conn))
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
                 conn.client_voice_stop = True
                 if len(conn.asr_audio) > 0:
                     # 如果未初始化VAD，则直接触发一次语音停止处理，避免卡在listening
                     if getattr(conn, "vad", None) is None:
-                        try:
-                            if getattr(conn, "auto_stop_task", None) and not conn.auto_stop_task.done():
-                                conn.auto_stop_task.cancel()
-                        except Exception:
-                            pass
-                        asr_audio_task = conn.asr_audio.copy()
-                        conn.asr_audio.clear()
-                        conn.reset_vad_states()
-                        await conn.asr.handle_voice_stop(conn, asr_audio_task)
+                        await handleAudioMessage(conn, b"")
                     else:
                         await handleAudioMessage(conn, b"")
             elif msg_json["state"] == "detect":

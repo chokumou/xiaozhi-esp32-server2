@@ -13,21 +13,8 @@ TAG = __name__
 
 async def handleAudioMessage(conn, audio):
     # 当前片段是否有人说话
-    # 当VAD缺失时，退化为按listen状态控制：start中视为有声，detect/stop时视静音
-    if getattr(conn, "vad", None) is None:
-        have_voice = conn.client_have_voice
-        # 在无VAD时仍累计音频帧
-        conn.asr_audio.append(audio)
-        # 如果停止标记已到达，强制走一轮ASR
-        if conn.client_voice_stop:
-            asr_audio_task = conn.asr_audio.copy()
-            conn.asr_audio.clear()
-            conn.reset_vad_states()
-            if len(asr_audio_task) > 10:
-                await conn.asr.handle_voice_stop(conn, asr_audio_task)
-        return
-    else:
-        have_voice = conn.vad.is_vad(conn, audio)
+    # 原実装に沿ってVADで判定
+    have_voice = conn.vad.is_vad(conn, audio)
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
@@ -50,22 +37,6 @@ async def resume_vad_detection(conn):
     # 等待2秒后恢复VAD检测
     await asyncio.sleep(1)
     conn.just_woken_up = False
-
-async def _auto_stop_if_needed(conn):
-    """在无VAD时自动触发一次ASR，避免长时间停留在listening状态"""
-    try:
-        # 最长录音时长（秒）
-        max_seconds = int(conn.config.get("max_listen_seconds", 6))
-        await asyncio.sleep(max_seconds)
-        if getattr(conn, "vad", None) is None and conn.client_have_voice and not conn.client_voice_stop:
-            conn.client_voice_stop = True
-            if len(conn.asr_audio) > 0 and conn.asr is not None:
-                asr_audio_task = conn.asr_audio.copy()
-                conn.asr_audio.clear()
-                conn.reset_vad_states()
-                await conn.asr.handle_voice_stop(conn, asr_audio_task)
-    except Exception:
-        pass
 
 
 async def startToChat(conn, text):

@@ -81,9 +81,6 @@ class ConnectionHandler:
         self.max_output_size = 0
         self.chat_history_conf = 0
         self.audio_format = "opus"
-        # 统计接收的音频帧
-        self.audio_frame_count = 0
-        self.audio_bytes_total = 0
 
         # 客户端状态相关
         self.client_abort = False
@@ -293,13 +290,6 @@ class ConnectionHandler:
         elif isinstance(message, bytes):
             if self.asr is None:
                 return
-            # 统计与抽样日志
-            self.audio_frame_count += 1
-            self.audio_bytes_total += len(message)
-            if self.audio_frame_count % 50 == 0:
-                self.logger.bind(tag=TAG).info(
-                    f"音频帧接收: {self.audio_frame_count} 帧, 总字节: {self.audio_bytes_total}"
-                )
             self.asr_audio_queue.put(message)
 
     async def handle_restart(self, message):
