@@ -125,6 +125,8 @@ class ConnectionHandler:
         # 所以涉及到ASR的变量，需要在这里定义，属于connection的私有变量
         self.asr_audio = []
         self.asr_audio_queue = queue.Queue()
+        # 在ASR未就绪期间的临时音频缓冲
+        self.pending_audio_frames = []
 
         # llm相关变量
         self.llm_finish_task = True
@@ -288,8 +290,16 @@ class ConnectionHandler:
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
+            # ASR未就绪：先暂存，待就绪后补投递
             if self.asr is None:
+                self.pending_audio_frames.append(message)
                 return
+            # 如有积压，先补投递
+            if self.pending_audio_frames:
+                for _frm in self.pending_audio_frames:
+                    self.asr_audio_queue.put(_frm)
+                self.pending_audio_frames.clear()
+            # 正常投递当前帧
             self.asr_audio_queue.put(message)
 
     async def handle_restart(self, message):
