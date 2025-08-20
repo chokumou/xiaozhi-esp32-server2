@@ -63,6 +63,10 @@ class SimpleHttpServer:
                         web.get("/xiaozhi/ota/", self.ota_handler.handle_get),
                         web.post("/xiaozhi/ota/", self.ota_handler.handle_post),
                         web.options("/xiaozhi/ota/", self.ota_handler.handle_post),
+                        # 同一ハンドラでスラ無しにも対応
+                        web.get("/xiaozhi/ota", self.ota_handler.handle_get),
+                        web.post("/xiaozhi/ota", self.ota_handler.handle_post),
+                        web.options("/xiaozhi/ota", self.ota_handler.handle_post),
                     ]
                 )
             # 添加路由
