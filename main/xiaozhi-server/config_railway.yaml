@@ -81,6 +81,7 @@ VAD:
   WebRTCVAD:
     type: webrtc
     aggressiveness: 3
+    min_silence_duration_ms: 800
 
 # ローカル音声認識
 ASR:

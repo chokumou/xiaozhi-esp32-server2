@@ -146,6 +146,12 @@ class ASRProvider(ASRProviderBase):
             else:
                 pcm_data = self.decode_opus(opus_data)
             file_path = self.save_audio_to_file(pcm_data, session_id)
+            try:
+                total_samples = sum(len(b) for b in pcm_data) // 2
+                dur = total_samples / 16000.0
+            except Exception:
+                dur = 0.0
+            logger.bind(tag=TAG).info(f"ASR输入音频: 帧数={len(pcm_data)}, 时长≈{dur:.2f}s")
             logger.bind(tag=TAG).debug(
                 f"音频文件保存耗时: {time.time() - start_time:.3f}s | 路径: {file_path}"
             )
