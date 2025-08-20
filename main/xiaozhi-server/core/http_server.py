@@ -1,8 +1,11 @@
 import asyncio
-from aiohttp import web
+from aiohttp import web, WSMsgType
 from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
+from core.connection import ConnectionHandler
+from core.utils.modules_initialize import initialize_modules
+import os
 
 TAG = __name__
 
@@ -13,6 +16,12 @@ class SimpleHttpServer:
         self.logger = setup_logging()
         self.ota_handler = OTAHandler(config)
         self.vision_handler = VisionHandler(config)
+        # Lazy-initialized modules for WS connections (shared where safe)
+        self._vad = None
+        self._asr = None
+        self._llm = None
+        self._memory = None
+        self._intent = None
 
     def _get_websocket_url(self, local_ip: str, port: int) -> str:
         """获取websocket地址
@@ -65,28 +74,99 @@ class SimpleHttpServer:
                     web.options("/mcp/vision/explain", self.vision_handler.handle_post),
                 ]
             )
-            
-            # デバッグ用ルート追加
-            self.logger.bind(tag=TAG).info("デバッグルートを追加: /debug/routes")
-            async def debug_routes(request):
-                routes_list = []
-                for route in app.router.routes():
-                    routes_list.append({
-                        "method": route.method,
-                        "path": route.resource.canonical,
-                        "handler": str(route.handler)
-                    })
-                return web.json_response(routes_list)
-            
-            app.add_routes([
-                web.get("/debug/routes", debug_routes)
-            ])
 
-            # 登録済みルートをログ出力
-            self.logger.bind(tag=TAG).info("=== 登録済みルート一覧 ===")
-            for route in app.router.routes():
-                self.logger.bind(tag=TAG).info(f"ルート: {route.method} {route.resource.canonical}")
-            self.logger.bind(tag=TAG).info("=== ルート一覧終了 ===")
+            # WebSocket route (same port): /xiaozhi/v1/
+            self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
+
+            async def ws_handler(request: web.Request):
+                # Agree on subprotocols
+                ws = web.WebSocketResponse(protocols=["v1", "xiaozhi-v1"])
+                await ws.prepare(request)
+
+                # Initialize modules lazily (avoid heavy startup)
+                if self._vad is None or self._asr is None or self._llm is None:
+                    on_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_ENVIRONMENT"))
+                    modules = initialize_modules(
+                        self.logger,
+                        self.config,
+                        init_vad=not on_railway,
+                        init_asr=not on_railway,
+                        init_llm=True,
+                        init_tts=False,
+                        init_memory=True,
+                        init_intent=True,
+                    )
+                    self._vad = modules.get("vad") if self._vad is None else self._vad
+                    self._asr = modules.get("asr") if self._asr is None else self._asr
+                    self._llm = modules.get("llm") if self._llm is None else self._llm
+                    self._memory = modules.get("memory") if self._memory is None else self._memory
+                    self._intent = modules.get("intent") if self._intent is None else self._intent
+
+                # Adapter for aiohttp <-> ConnectionHandler expected API
+                class _State:
+                    @property
+                    def name(self):
+                        return "CLOSED" if ws.closed else "OPEN"
+
+                class AiohttpWebSocketAdapter:
+                    def __init__(self, request: web.Request, ws: web.WebSocketResponse):
+                        self._request = request
+                        self._ws = ws
+                        self.state = _State()
+
+                    @property
+                    def request(self):
+                        class Req:
+                            def __init__(self, r: web.Request):
+                                self.headers = r.headers
+                                # include query string
+                                self.path = r.path_qs
+                        return Req(self._request)
+
+                    @property
+                    def remote_address(self):
+                        return (self._request.remote or "0.0.0.0", 0)
+
+                    @property
+                    def closed(self):
+                        return self._ws.closed
+
+                    async def send(self, data):
+                        if isinstance(data, (bytes, bytearray)):
+                            await self._ws.send_bytes(data)
+                        else:
+                            await self._ws.send_str(str(data))
+
+                    async def close(self):
+                        await self._ws.close()
+
+                    def __aiter__(self):
+                        return self
+
+                    async def __anext__(self):
+                        msg = await self._ws.receive()
+                        if msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSED, WSMsgType.ERROR):
+                            raise StopAsyncIteration
+                        if msg.type == WSMsgType.BINARY:
+                            return bytes(msg.data)
+                        if msg.type == WSMsgType.TEXT:
+                            return msg.data
+                        # ignore other types
+                        return ""
+
+                adapter = AiohttpWebSocketAdapter(request, ws)
+                handler = ConnectionHandler(
+                    self.config,
+                    self._vad,
+                    self._asr,
+                    self._llm,
+                    self._memory,
+                    self._intent,
+                )
+                await handler.handle_connection(adapter)
+                return ws
+
+            app.add_routes([web.get("/xiaozhi/v1/", ws_handler)])
 
             # 运行服务
             runner = web.AppRunner(app)

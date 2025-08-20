@@ -70,12 +70,16 @@ async def main():
     # 添加 stdin 监控任务
     stdin_task = asyncio.create_task(monitor_stdin())
 
-    # 启动 WebSocket 服务器（Railwayでも$PORTで起動）
-    ws_server = WebSocketServer(config)
-    ws_task = asyncio.create_task(ws_server.start())
-    # 启动 Simple http 服务器（Railwayでは起動しない）
+    # RailwayではHTTP+WSを同一ポートのSimpleHttpServerで提供
+    ws_task = None
     ota_task = None
-    if not on_railway:
+    if on_railway:
+        server = SimpleHttpServer(config)
+        ota_task = asyncio.create_task(server.start())
+    else:
+        # ローカルは従来どおり別プロセス
+        ws_server = WebSocketServer(config)
+        ws_task = asyncio.create_task(ws_server.start())
         ota_server = SimpleHttpServer(config)
         ota_task = asyncio.create_task(ota_server.start())
 
