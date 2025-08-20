@@ -44,8 +44,12 @@ class OTAHandler(BaseHandler):
             public_base = os.getenv(
                 "PUBLIC_BASE_URL",
                 "https://xiaozhi-esp32-server2-production.up.railway.app",
-            ).rstrip("/")
+            )
+            # 末尾の空白やセミコロン/スラッシュを除去
+            public_base = public_base.strip().rstrip("/;")
+
             ws_url = self._get_websocket_url(local_ip, port)
+            ws_url = ws_url.strip().rstrip(";")
 
             return_json = {
                 "firmware": {"version": "1.6.8", "url": ""},
@@ -93,8 +97,12 @@ class OTAHandler(BaseHandler):
             public_base = os.getenv(
                 "PUBLIC_BASE_URL",
                 "https://xiaozhi-esp32-server2-production.up.railway.app",
-            ).rstrip("/")
+            )
+            # 末尾の空白やセミコロン/スラッシュを除去
+            public_base = public_base.strip().rstrip("/;")
+
             ws_url = self._get_websocket_url(local_ip, port)
+            ws_url = ws_url.strip().rstrip(";")
 
             return_json = {
                 "firmware": {"version": "1.6.8", "url": ""},
