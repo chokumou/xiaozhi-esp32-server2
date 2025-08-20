@@ -24,8 +24,7 @@ class OTAHandler(BaseHandler):
         server_config = self.config["server"]
         websocket_config = server_config.get("websocket", "")
 
-        # Railway環境では設定されたWebSocket URLを使用
-        if websocket_config and "你的" not in websocket_config and websocket_config.strip():
+        if websocket_config and "你的" not in websocket_config:
             return websocket_config
         else:
             return f"ws://{local_ip}:{port}/xiaozhi/v1/"
@@ -50,28 +49,28 @@ class OTAHandler(BaseHandler):
             port = int(server_config.get("port", 8000))
             local_ip = get_local_ip()
 
-            # nekota-serverの形式に合わせてレスポンスを修正
-            websocket_url = self._get_websocket_url(local_ip, port)
+            # Determine endpoint/origin based on request host
+            host = request.headers.get("Host", "localhost")
+            scheme = "https" if ":443" in host or host.endswith("railway.app") else "http"
+            ws_url = self._get_websocket_url(local_ip, port)
+
             return_json = {
                 "firmware": {
-                    "version": data_json["application"].get("version", "1.6.8"),
+                    "version": data_json.get("application", {}).get("version", "1.6.8"),
                     "url": "",
                 },
                 "websocket": {
-                    "endpoint": "https://xiaozhi-esp32-server2-production.up.railway.app",
-                    "port": 443
+                    "endpoint": f"{scheme}://{host}",
+                    "port": 443 if scheme == "https" else port,
                 },
                 "xiaozhi_websocket": {
-                    "ws_url": websocket_url,
-                    "ws_protocol": "xiaozhi-v1",
+                    "ws_url": ws_url,
+                    "ws_protocol": "v1",
                     "protocol_version": 1,
-                    "origin": "https://xiaozhi-esp32-server2-production.up.railway.app"
-                }
+                    "origin": f"{scheme}://{host}",
+                },
             }
-            response = web.Response(
-                text=json.dumps(return_json, separators=(",", ":")),
-                content_type="application/json",
-            )
+            response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
         except Exception as e:
             return_json = {"success": False, "message": "request error."}
             response = web.Response(
@@ -93,36 +92,29 @@ class OTAHandler(BaseHandler):
             self.logger.bind(tag=TAG).info(f"ユーザーエージェント: {request.headers.get('User-Agent', 'N/A')}")
             self.logger.bind(tag=TAG).info(f"全ヘッダー: {dict(request.headers)}")
             
-            # nekota-serverの形式に合わせてレスポンスを修正
             server_config = self.config["server"]
             local_ip = get_local_ip()
             port = int(server_config.get("port", 8000))
-            websocket_url = self._get_websocket_url(local_ip, port)
-            
+
+            host = request.headers.get("Host", "localhost")
+            scheme = "https" if ":443" in host or host.endswith("railway.app") else "http"
+            ws_url = self._get_websocket_url(local_ip, port)
+
             return_json = {
-                "firmware": {
-                    "version": "1.6.8",
-                    "url": "",
-                },
-                "websocket": {
-                    "endpoint": "https://xiaozhi-esp32-server2-production.up.railway.app",
-                    "port": 443
-                },
+                "firmware": {"version": "1.6.8", "url": ""},
+                "websocket": {"endpoint": f"{scheme}://{host}", "port": 443 if scheme == "https" else port},
                 "xiaozhi_websocket": {
-                    "ws_url": websocket_url,
-                    "ws_protocol": "xiaozhi-v1",
+                    "ws_url": ws_url,
+                    "ws_protocol": "v1",
                     "protocol_version": 1,
-                    "origin": "https://xiaozhi-esp32-server2-production.up.railway.app"
-                }
+                    "origin": f"{scheme}://{host}",
+                },
             }
-            
+
             self.logger.bind(tag=TAG).info(f"レスポンス: {return_json}")
             self.logger.bind(tag=TAG).info(f"=== OTA GET リクエスト処理完了 ===")
-            
-            response = web.Response(
-                text=json.dumps(return_json, separators=(",", ":")),
-                content_type="application/json"
-            )
+
+            response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"OTA GET请求异常: {e}")
             response = web.Response(text="OTA接口异常", content_type="text/plain")
