@@ -79,6 +79,9 @@ class WebSocketServer:
             port,
             process_request=self._http_response,
             subprotocols=["v1", "xiaozhi-v1"],
+            ping_interval=10,
+            ping_timeout=20,
+            close_timeout=5,
         ):
             await asyncio.Future()
 
