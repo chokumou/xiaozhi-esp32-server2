@@ -92,9 +92,16 @@ def initialize_modules(
 
     # 初始化ASR模块
     if init_asr:
-        select_asr_module = config["selected_module"]["ASR"]
-        modules["asr"] = initialize_asr(config)
-        logger.bind(tag=TAG).info(f"初始化组件: asr成功 {select_asr_module}")
+        try:
+            select_asr_module = config["selected_module"]["ASR"]
+            new_asr = initialize_asr(config)
+            if new_asr is not None:
+                modules["asr"] = new_asr
+                logger.bind(tag=TAG).info(f"初始化组件: asr成功 {select_asr_module}")
+            else:
+                logger.bind(tag=TAG).warning("初始化组件: asr未就绪，稍后按需实例化")
+        except Exception as e:
+            logger.bind(tag=TAG).warning(f"初始化组件: asr失败，将延迟到连接阶段初始化: {str(e)}")
     return modules
 
 

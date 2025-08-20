@@ -163,8 +163,11 @@ class ConnectionHandler:
 
     async def handle_connection(self, ws):
         try:
-            # 获取并验证headers
-            self.headers = dict(ws.request.headers)
+            # 获取并验证headers（大小写不敏感，统一为小写键）
+            try:
+                self.headers = {k.lower(): v for k, v in ws.request.headers.items()}
+            except Exception:
+                self.headers = dict(ws.request.headers)
 
             if self.headers.get("device-id", None) is None:
                 # 尝试从 URL 的查询参数中获取 device-id
@@ -423,17 +426,23 @@ class ConnectionHandler:
         return tts
 
     def _initialize_asr(self):
-        """初始化ASR"""
-        if self._asr.interface_type == InterfaceType.LOCAL:
-            # 如果公共ASR是本地服务，则直接返回
-            # 因为本地一个实例ASR，可以被多个连接共享
-            asr = self._asr
-        else:
-            # 如果公共ASR是远程服务，则初始化一个新实例
-            # 因为远程ASR，涉及到websocket连接和接收线程，需要每个连接一个实例
-            asr = initialize_asr(self.config)
+        """初始化ASR（容错：当传入的公共ASR为空时，自动实例化）"""
+        try:
+            if self._asr is None:
+                # 公共ASR还未就绪，按配置即时实例化一个
+                self.logger.bind(tag=TAG).info("公共ASR未预初始化，正在即时实例化...")
+                asr = initialize_asr(self.config)
+                return asr
 
-        return asr
+            if getattr(self._asr, "interface_type", None) == InterfaceType.LOCAL:
+                # 本地单例ASR可复用
+                return self._asr
+            else:
+                # 远程ASR需要每连接一个实例
+                return initialize_asr(self.config)
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"初始化ASR失败: {e}")
+            return None
 
     def _initialize_voiceprint(self):
         """为当前连接初始化声纹识别"""
