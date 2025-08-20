@@ -51,6 +51,22 @@ async def resume_vad_detection(conn):
     await asyncio.sleep(1)
     conn.just_woken_up = False
 
+async def _auto_stop_if_needed(conn):
+    """在无VAD时自动触发一次ASR，避免长时间停留在listening状态"""
+    try:
+        # 最长录音时长（秒）
+        max_seconds = int(conn.config.get("max_listen_seconds", 6))
+        await asyncio.sleep(max_seconds)
+        if getattr(conn, "vad", None) is None and conn.client_have_voice and not conn.client_voice_stop:
+            conn.client_voice_stop = True
+            if len(conn.asr_audio) > 0 and conn.asr is not None:
+                asr_audio_task = conn.asr_audio.copy()
+                conn.asr_audio.clear()
+                conn.reset_vad_states()
+                await conn.asr.handle_voice_stop(conn, asr_audio_task)
+    except Exception:
+        pass
+
 
 async def startToChat(conn, text):
     # 检查输入是否是JSON格式（包含说话人信息）
