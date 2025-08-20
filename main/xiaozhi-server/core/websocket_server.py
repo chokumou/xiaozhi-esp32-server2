@@ -148,7 +148,7 @@ class WebSocketServer:
                 "websocket": {"endpoint": f"{scheme}://{host}", "port": 443},
                 "xiaozhi_websocket": {
                     "ws_url": f"wss://{host}/xiaozhi/v1/",
-                    "ws_protocol": "xiaozhi-v1",
+                    "ws_protocol": "v1",
                     "protocol_version": 1,
                     "origin": f"{scheme}://{host}",
                 },
