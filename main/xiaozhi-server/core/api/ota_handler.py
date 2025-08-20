@@ -1,6 +1,7 @@
 import json
 import time
 from aiohttp import web
+import os
 from core.utils.util import get_local_ip
 from core.api.base_handler import BaseHandler
 
@@ -49,9 +50,11 @@ class OTAHandler(BaseHandler):
             port = int(server_config.get("port", 8000))
             local_ip = get_local_ip()
 
-            # Determine endpoint/origin based on request host
-            host = request.headers.get("Host", "localhost")
-            scheme = "https" if ":443" in host or host.endswith("railway.app") else "http"
+            # Public base URL for devices (ignore Railway healthcheck host)
+            public_base = os.getenv(
+                "PUBLIC_BASE_URL",
+                "https://xiaozhi-esp32-server2-production.up.railway.app",
+            ).rstrip("/")
             ws_url = self._get_websocket_url(local_ip, port)
 
             return_json = {
@@ -59,15 +62,12 @@ class OTAHandler(BaseHandler):
                     "version": data_json.get("application", {}).get("version", "1.6.8"),
                     "url": "",
                 },
-                "websocket": {
-                    "endpoint": f"{scheme}://{host}",
-                    "port": 443 if scheme == "https" else port,
-                },
+                "websocket": {"endpoint": public_base, "port": 443},
                 "xiaozhi_websocket": {
                     "ws_url": ws_url,
                     "ws_protocol": "v1",
                     "protocol_version": 1,
-                    "origin": f"{scheme}://{host}",
+                    "origin": public_base,
                 },
             }
             response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
@@ -96,18 +96,20 @@ class OTAHandler(BaseHandler):
             local_ip = get_local_ip()
             port = int(server_config.get("port", 8000))
 
-            host = request.headers.get("Host", "localhost")
-            scheme = "https" if ":443" in host or host.endswith("railway.app") else "http"
+            public_base = os.getenv(
+                "PUBLIC_BASE_URL",
+                "https://xiaozhi-esp32-server2-production.up.railway.app",
+            ).rstrip("/")
             ws_url = self._get_websocket_url(local_ip, port)
 
             return_json = {
                 "firmware": {"version": "1.6.8", "url": ""},
-                "websocket": {"endpoint": f"{scheme}://{host}", "port": 443 if scheme == "https" else port},
+                "websocket": {"endpoint": public_base, "port": 443},
                 "xiaozhi_websocket": {
                     "ws_url": ws_url,
                     "ws_protocol": "v1",
                     "protocol_version": 1,
-                    "origin": f"{scheme}://{host}",
+                    "origin": public_base,
                 },
             }
 
