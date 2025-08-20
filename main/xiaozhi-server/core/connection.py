@@ -127,6 +127,9 @@ class ConnectionHandler:
         self.asr_audio_queue = queue.Queue()
         # 在ASR未就绪期间的临时音频缓冲
         self.pending_audio_frames = []
+        # 简易统计：接收的音频帧与字节数
+        self._rx_frame_count = 0
+        self._rx_bytes_total = 0
 
         # llm相关变量
         self.llm_finish_task = True
@@ -300,6 +303,12 @@ class ConnectionHandler:
                     self.asr_audio_queue.put(_frm)
                 self.pending_audio_frames.clear()
             # 正常投递当前帧
+            self._rx_frame_count += 1
+            self._rx_bytes_total += len(message)
+            if (self._rx_frame_count % 25) == 0:
+                self.logger.bind(tag=TAG).info(
+                    f"音频帧接收统计: {self._rx_frame_count} 帧, {self._rx_bytes_total} 字节"
+                )
             self.asr_audio_queue.put(message)
 
     async def handle_restart(self, message):
