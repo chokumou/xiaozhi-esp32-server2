@@ -31,26 +31,16 @@ class OTAHandler(BaseHandler):
             return f"ws://{local_ip}:{port}/xiaozhi/v1/"
 
     async def handle_post(self, request):
-        """处理 OTA POST 请求"""
+        """处理 OTA POST 请求（设备からのPOSTは必ず200でJSONを返す）"""
         try:
-            data = await request.text()
-            self.logger.bind(tag=TAG).debug(f"OTA请求方法: {request.method}")
-            self.logger.bind(tag=TAG).debug(f"OTA请求头: {request.headers}")
-            self.logger.bind(tag=TAG).debug(f"OTA请求数据: {data}")
-
-            device_id = request.headers.get("device-id", "")
-            if device_id:
-                self.logger.bind(tag=TAG).info(f"OTA请求设备ID: {device_id}")
-            else:
-                raise Exception("OTA请求设备ID为空")
-
-            data_json = json.loads(data)
+            # デバイスはJSON以外を送る場合があるため、本文は参照のみ
+            _ = await request.read()
+            self.logger.bind(tag=TAG).debug(f"OTA POST headers: {dict(request.headers)}")
 
             server_config = self.config["server"]
             port = int(server_config.get("port", 8000))
             local_ip = get_local_ip()
 
-            # Public base URL for devices (ignore Railway healthcheck host)
             public_base = os.getenv(
                 "PUBLIC_BASE_URL",
                 "https://xiaozhi-esp32-server2-production.up.railway.app",
@@ -58,10 +48,7 @@ class OTAHandler(BaseHandler):
             ws_url = self._get_websocket_url(local_ip, port)
 
             return_json = {
-                "firmware": {
-                    "version": data_json.get("application", {}).get("version", "1.6.8"),
-                    "url": "",
-                },
+                "firmware": {"version": "1.6.8", "url": ""},
                 "websocket": {"endpoint": public_base, "port": 443},
                 "xiaozhi_websocket": {
                     "ws_url": ws_url,
@@ -71,12 +58,19 @@ class OTAHandler(BaseHandler):
                 },
             }
             response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
-        except Exception as e:
-            return_json = {"success": False, "message": "request error."}
-            response = web.Response(
-                text=json.dumps(return_json, separators=(",", ":")),
-                content_type="application/json",
-            )
+        except Exception:
+            # 例外時も200で空の構造を返す
+            fallback = {
+                "firmware": {"version": "1.6.8", "url": ""},
+                "websocket": {"endpoint": "", "port": 0},
+                "xiaozhi_websocket": {
+                    "ws_url": "",
+                    "ws_protocol": "v1",
+                    "protocol_version": 1,
+                    "origin": "",
+                },
+            }
+            response = web.Response(text=json.dumps(fallback, separators=(",", ":")), content_type="application/json")
         finally:
             self._add_cors_headers(response)
             return response
