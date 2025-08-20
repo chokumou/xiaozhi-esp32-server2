@@ -87,7 +87,7 @@ VAD:
 ASR:
   sherpa_onnx_local:
     type: sherpa_onnx_local
-    model_dir: models/sherpa_sense_voice
+    model_dir: /opt/models/sherpa_sense_voice
     model_type: sense_voice
     output_dir: tmp/
 
