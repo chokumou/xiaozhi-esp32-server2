@@ -27,6 +27,14 @@ def initialize_modules(
     """
     modules = {}
 
+    def _sel_conf(section: str, select_key: str) -> Dict[str, Any]:
+        # 安全にセクション/選択キーの設定を取得（None対策）
+        section_conf = config.get(section) or {}
+        chosen = section_conf.get(select_key) or {}
+        if not isinstance(chosen, dict):
+            chosen = {}
+        return chosen
+
     # 初始化TTS模块
     if init_tts:
         select_tts_module = config["selected_module"]["TTS"]
@@ -36,42 +44,27 @@ def initialize_modules(
     # 初始化LLM模块
     if init_llm:
         select_llm_module = config["selected_module"]["LLM"]
-        llm_type = (
-            select_llm_module
-            if "type" not in config["LLM"][select_llm_module]
-            else config["LLM"][select_llm_module]["type"]
-        )
-        modules["llm"] = llm.create_instance(
-            llm_type,
-            config["LLM"][select_llm_module],
-        )
+        llm_conf = _sel_conf("LLM", select_llm_module)
+        llm_type = llm_conf.get("type", select_llm_module)
+        modules["llm"] = llm.create_instance(llm_type, llm_conf)
         logger.bind(tag=TAG).info(f"初始化组件: llm成功 {select_llm_module}")
 
     # 初始化Intent模块
     if init_intent:
         select_intent_module = config["selected_module"]["Intent"]
-        intent_type = (
-            select_intent_module
-            if "type" not in config["Intent"][select_intent_module]
-            else config["Intent"][select_intent_module]["type"]
-        )
-        modules["intent"] = intent.create_instance(
-            intent_type,
-            config["Intent"][select_intent_module],
-        )
+        intent_conf = _sel_conf("Intent", select_intent_module)
+        intent_type = intent_conf.get("type", select_intent_module)
+        modules["intent"] = intent.create_instance(intent_type, intent_conf)
         logger.bind(tag=TAG).info(f"初始化组件: intent成功 {select_intent_module}")
 
     # 初始化Memory模块
     if init_memory:
         select_memory_module = config["selected_module"]["Memory"]
-        memory_type = (
-            select_memory_module
-            if "type" not in config["Memory"][select_memory_module]
-            else config["Memory"][select_memory_module]["type"]
-        )
+        memory_conf = _sel_conf("Memory", select_memory_module)
+        memory_type = memory_conf.get("type", select_memory_module)
         modules["memory"] = memory.create_instance(
             memory_type,
-            config["Memory"][select_memory_module],
+            memory_conf,
             config.get("summaryMemory", None),
         )
         logger.bind(tag=TAG).info(f"初始化组件: memory成功 {select_memory_module}")
@@ -79,15 +72,9 @@ def initialize_modules(
     # 初始化VAD模块
     if init_vad:
         select_vad_module = config["selected_module"]["VAD"]
-        vad_type = (
-            select_vad_module
-            if "type" not in config["VAD"][select_vad_module]
-            else config["VAD"][select_vad_module]["type"]
-        )
-        modules["vad"] = vad.create_instance(
-            vad_type,
-            config["VAD"][select_vad_module],
-        )
+        vad_conf = _sel_conf("VAD", select_vad_module)
+        vad_type = vad_conf.get("type", select_vad_module)
+        modules["vad"] = vad.create_instance(vad_type, vad_conf)
         logger.bind(tag=TAG).info(f"初始化组件: vad成功 {select_vad_module}")
 
     # 初始化ASR模块
@@ -107,14 +94,13 @@ def initialize_modules(
 
 def initialize_tts(config):
     select_tts_module = config["selected_module"]["TTS"]
-    tts_type = (
-        select_tts_module
-        if "type" not in config["TTS"][select_tts_module]
-        else config["TTS"][select_tts_module]["type"]
-    )
+    tts_conf = (config.get("TTS") or {}).get(select_tts_module) or {}
+    if not isinstance(tts_conf, dict):
+        tts_conf = {}
+    tts_type = tts_conf.get("type", select_tts_module)
     new_tts = tts.create_instance(
         tts_type,
-        config["TTS"][select_tts_module],
+        tts_conf,
         str(config.get("delete_audio", True)).lower() in ("true", "1", "yes"),
     )
     return new_tts
@@ -122,14 +108,13 @@ def initialize_tts(config):
 
 def initialize_asr(config):
     select_asr_module = config["selected_module"]["ASR"]
-    asr_type = (
-        select_asr_module
-        if "type" not in config["ASR"][select_asr_module]
-        else config["ASR"][select_asr_module]["type"]
-    )
+    asr_conf = (config.get("ASR") or {}).get(select_asr_module) or {}
+    if not isinstance(asr_conf, dict):
+        asr_conf = {}
+    asr_type = asr_conf.get("type", select_asr_module)
     new_asr = asr.create_instance(
         asr_type,
-        config["ASR"][select_asr_module],
+        asr_conf,
         str(config.get("delete_audio", True)).lower() in ("true", "1", "yes"),
     )
     logger.bind(tag=TAG).info("ASR模块初始化完成")
