@@ -5,6 +5,7 @@ from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
 from core.connection import ConnectionHandler
 from core.utils.modules_initialize import initialize_modules
+from config.runtime_flags import flags
 import os
 
 TAG = __name__
@@ -78,6 +79,19 @@ class SimpleHttpServer:
                     web.options("/mcp/vision/explain", self.vision_handler.handle_post),
                 ]
             )
+
+            # ランタイムデバッグ用トグル（再デプロイ不要）
+            async def toggle_vad_force(request: web.Request):
+                on = request.query.get("on", "")
+                if on in ("1", "true", "True"):
+                    flags.set("VAD_FORCE_VOICE", True)
+                elif on in ("0", "false", "False"):
+                    flags.set("VAD_FORCE_VOICE", False)
+                return web.json_response({
+                    "VAD_FORCE_VOICE": flags.get("VAD_FORCE_VOICE", False),
+                    "flags": flags.dump(),
+                })
+            app.add_routes([web.get("/debug/vad_force_voice", toggle_vad_force)])
 
             # WebSocket route (same port): /xiaozhi/v1/
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
