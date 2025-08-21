@@ -1,4 +1,5 @@
 import time
+import os
 import asyncio
 import json
 from core.handle.sendAudioHandle import send_stt_message
@@ -18,6 +19,16 @@ async def handleAudioMessage(conn, audio):
         have_voice = conn.client_have_voice
     else:
         have_voice = conn.vad.is_vad(conn, audio)
+
+    # デバッグ用途: 強制的に有声扱いし、一定フレームで自動停止
+    if os.getenv("VAD_FORCE_VOICE", "0") == "1":
+        have_voice = True
+        # カウンタを持たせて20フレーム程度で自動的にstopを立てる
+        if not hasattr(conn, "_force_voice_frames"):
+            conn._force_voice_frames = 0
+        conn._force_voice_frames += 1
+        if conn._force_voice_frames >= 20:
+            conn.client_voice_stop = True
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
