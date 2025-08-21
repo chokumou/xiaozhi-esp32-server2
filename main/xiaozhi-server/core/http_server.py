@@ -130,6 +130,10 @@ class SimpleHttpServer:
                 try:
                     import math
                     import numpy as np
+                    import io
+                    import json as _json
+                    import httpx
+                    import os as _os
                     duration_s = float(request.query.get("duration", "1.0"))
                     freq = float(request.query.get("freq", "440"))
                     frames = int(duration_s * 50)  # およそ20ms単位
@@ -175,17 +179,49 @@ class SimpleHttpServer:
                     t = np.arange(0, int(duration_s * sr))
                     wave = (0.2 * 32767 * np.sin(2 * math.pi * freq * t / sr)).astype(np.int16)
                     frame_len = 320  # 約20ms
+                    frames = []
                     for i in range(0, len(wave), frame_len):
                         chunk = wave[i:i+frame_len].tobytes()
-                        await handleAudioMessage(handler, chunk)
+                        frames.append(chunk)
+                        if handler.asr is not None:
+                            await handleAudioMessage(handler, chunk)
 
                     # 音声停止シグナル
                     handler.client_voice_stop = True
-                    await handleAudioMessage(handler, b"")
+                    if handler.asr is not None:
+                        await handleAudioMessage(handler, b"")
+                    else:
+                        # Whisperフォールバック（ASR未初期化時）
+                        # まとめたPCMをWAVにして /v1/audio/transcriptions へ
+                        import wave as _wave
+                        buf = io.BytesIO()
+                        with _wave.open(buf, 'wb') as wf:
+                            wf.setnchannels(1)
+                            wf.setsampwidth(2)
+                            wf.setframerate(16000)
+                            wf.writeframes(b"".join(frames))
+                        buf.seek(0)
+                        api_key = _os.getenv('OPENAI_API_KEY', '')
+                        base_url = 'https://api.openai.com/v1/audio/transcriptions'
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            files = {'file': ('audio.wav', buf, 'audio/wav')}
+                            data = {'model': 'whisper-1', 'language': 'ja'}
+                            headers = {'Authorization': f'Bearer {api_key}'}
+                            resp = await client.post(base_url, files=files, data=data, headers=headers)
+                        text = ''
+                        if resp.status_code == 200:
+                            try:
+                                text = resp.json().get('text', '')
+                            except Exception:
+                                text = ''
+                        # 最低限、テキストが取れたらTTS/応答に流す
+                        from core.handle.receiveAudioHandle import startToChat as _start
+                        if text.strip():
+                            await _start(handler, text)
 
                     return web.json_response({
                         "ok": True,
-                        "frames": frames,
+                        "frames": len(frames),
                         "note": "sine fed; check ASR logs and TTS messages",
                         "sent_messages": getattr(handler.websocket, "sent", [])[-3:],
                     })
