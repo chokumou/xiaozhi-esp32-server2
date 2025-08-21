@@ -14,7 +14,7 @@ server:
 log:
   log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
   log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
-  log_level: INFO
+  log_level: DEBUG
   log_dir: tmp
   log_file: "server.log"
   data_dir: data

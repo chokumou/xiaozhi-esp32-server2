@@ -406,7 +406,8 @@ class ConnectionHandler:
             self._init_prompt_enhancement()
 
         except Exception as e:
-            self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
+            stack = traceback.format_exc()
+            self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}; stack=\n{stack}")
 
     def _init_prompt_enhancement(self):
         # 更新上下文信息
