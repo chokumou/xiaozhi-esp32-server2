@@ -124,6 +124,65 @@ class SimpleHttpServer:
                     return web.json_response({"ok": False, "error": str(e)}, status=500)
             app.add_routes([web.post("/debug/test_audio", test_audio)])
 
+            # 合成サイン波でASRまで通す自己診断（WS不要）
+            async def feed_sine(request: web.Request):
+                try:
+                    import math
+                    import numpy as np
+                    duration_s = float(request.query.get("duration", "1.0"))
+                    freq = float(request.query.get("freq", "440"))
+                    frames = int(duration_s * 50)  # およそ20ms単位
+
+                    class DummyWS:
+                        def __init__(self):
+                            self.request = type("Req", (), {"headers": {}, "path_qs": "/"})()
+                            self.remote_address = ("127.0.0.1", 0)
+                            self.closed = False
+                            self.state = type("S", (), {"name": "OPEN"})()
+                            self.sent = []
+                        async def send(self, data):
+                            self.sent.append(data)
+                        async def close(self):
+                            self.closed = True
+                        def __aiter__(self):
+                            return self
+                        async def __anext__(self):
+                            raise StopAsyncIteration
+
+                    handler = ConnectionHandler(self.config, self._vad, self._asr, self._llm, self._memory, self._intent)
+                    handler.websocket = DummyWS()
+                    handler.client_listen_mode = "auto"
+                    handler.client_have_voice = True
+                    handler.client_voice_stop = False
+                    handler.audio_format = "pcm"  # PCM直通
+
+                    # VADバイパスで強制的にASRへ
+                    flags.set("VAD_FORCE_VOICE", True)
+
+                    # 16kHz, int16 のサイン波をフレーム化
+                    sr = 16000
+                    t = np.arange(0, int(duration_s * sr))
+                    wave = (0.2 * 32767 * np.sin(2 * math.pi * freq * t / sr)).astype(np.int16)
+                    frame_len = 320  # 約20ms
+                    for i in range(0, len(wave), frame_len):
+                        chunk = wave[i:i+frame_len].tobytes()
+                        await handleAudioMessage(handler, chunk)
+
+                    # 音声停止シグナル
+                    handler.client_voice_stop = True
+                    await handleAudioMessage(handler, b"")
+
+                    return web.json_response({
+                        "ok": True,
+                        "frames": frames,
+                        "note": "sine fed; check ASR logs and TTS messages",
+                        "sent_messages": getattr(handler.websocket, "sent", [])[-3:],
+                    })
+                except Exception as e:
+                    return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+            app.add_routes([web.get("/debug/feed_sine", feed_sine)])
+
             # WebSocket route (same port): /xiaozhi/v1/
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
 
