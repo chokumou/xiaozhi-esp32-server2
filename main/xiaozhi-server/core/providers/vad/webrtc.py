@@ -28,15 +28,17 @@ class VADProvider(VADProviderBase):
 
         # 双阈值退化参数（未安装webrtcvad时生效）
         # aggressiveness越大，threshold越低（更敏感）
-        aggr = float(config.get("aggressiveness", 2))
-        self.energy_threshold = 300 + max(0, 3 - aggr) * 200  # 简单经验值
+        aggr = float(config.get("aggressiveness", 3))
+        # 更敏感的能量阈值（平均绝对振幅）
+        base = 120.0
+        self.energy_threshold = base + max(0.0, 3 - aggr) * 60.0
         self.energy_threshold_low = self.energy_threshold * 0.6
 
         # 静默结束判定
-        self.silence_threshold_ms = int(config.get("min_silence_duration_ms", 800))
+        self.silence_threshold_ms = int(config.get("min_silence_duration_ms", 300))
 
         # 至少多少帧判定为有声
-        self.frame_window_threshold = 3
+        self.frame_window_threshold = 2
 
     def _is_voice_energy(self, pcm_chunk: bytes) -> bool:
         if not pcm_chunk:
@@ -81,6 +83,10 @@ class VADProvider(VADProviderBase):
                     stop_duration = time.time() * 1000 - conn.last_activity_time
                     if stop_duration >= self.silence_threshold_ms:
                         conn.client_voice_stop = True
+                if client_have_voice and not conn.client_have_voice:
+                    logger.bind(tag=TAG).debug(
+                        f"VAD检测到有声: 能量阈值={self.energy_threshold:.1f}"
+                    )
                 if client_have_voice:
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
