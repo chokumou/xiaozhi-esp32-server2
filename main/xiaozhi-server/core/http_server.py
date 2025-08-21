@@ -160,6 +160,16 @@ class SimpleHttpServer:
                     # VADバイパスで強制的にASRへ
                     flags.set("VAD_FORCE_VOICE", True)
 
+                    # ASR/TTS を明示初期化
+                    if handler.asr is None:
+                        handler.asr = handler._initialize_asr()
+                        if handler.asr is not None:
+                            asyncio.run_coroutine_threadsafe(handler.asr.open_audio_channels(handler), handler.loop)
+                    if handler.tts is None:
+                        handler.tts = handler._initialize_tts()
+                        if handler.tts is not None:
+                            asyncio.run_coroutine_threadsafe(handler.tts.open_audio_channels(handler), handler.loop)
+
                     # 16kHz, int16 のサイン波をフレーム化
                     sr = 16000
                     t = np.arange(0, int(duration_s * sr))
