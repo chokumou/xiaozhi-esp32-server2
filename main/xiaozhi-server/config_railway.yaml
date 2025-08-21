@@ -80,8 +80,8 @@ TTS:
 VAD:
   WebRTCVAD:
     type: webrtc
-    aggressiveness: 3
-    min_silence_duration_ms: 800
+    aggressiveness: 2
+    min_silence_duration_ms: 400
 
 # 音声認識（OpenAI Whisper API）
 ASR:
