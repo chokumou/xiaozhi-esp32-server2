@@ -4,6 +4,7 @@ from config.logger import setup_logging
 from core.api.ota_handler import OTAHandler
 from core.api.vision_handler import VisionHandler
 from core.connection import ConnectionHandler
+from core.handle.receiveAudioHandle import handleAudioMessage
 from core.utils.modules_initialize import initialize_modules
 from config.runtime_flags import flags
 import os
