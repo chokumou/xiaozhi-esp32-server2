@@ -93,6 +93,37 @@ class SimpleHttpServer:
                 })
             app.add_routes([web.get("/debug/vad_force_voice", toggle_vad_force)])
 
+            # 合成テスト波形を流し込んでASRパイプラインを検証する簡易エンドポイント
+            async def test_audio(request: web.Request):
+                # 300msの擬似音声フレーム（20フレーム想定）を送って、強制stop→ASR
+                # サイズは小さめのダミーOPUSデータ（decoder側でスキップされてもASR_FORCEを確認する用途）
+                try:
+                    from core.connection import ConnectionHandler
+                    # ダミーWSアダプタを生成して短時間だけ処理
+                    class DummyWS:
+                        def __init__(self):
+                            self.request = type("Req", (), {"headers": {}, "path_qs": "/"})()
+                            self.remote_address = ("127.0.0.1", 0)
+                            self.closed = False
+                            self.state = type("S", (), {"name": "OPEN"})()
+                        async def send(self, data):
+                            return None
+                        async def close(self):
+                            self.closed = True
+                        def __aiter__(self):
+                            return self
+                        async def __anext__(self):
+                            raise StopAsyncIteration
+
+                    handler = ConnectionHandler(self.config, self._vad, self._asr, self._llm, self._memory, self._intent)
+                    # VADバイパスをONにして、ASR→LLM→TTSまで通るか即時検証
+                    flags.set("VAD_FORCE_VOICE", True)
+                    await handler.handle_connection(DummyWS())
+                    return web.json_response({"ok": True, "note": "pipeline primed; speak via normal WS"})
+                except Exception as e:
+                    return web.json_response({"ok": False, "error": str(e)}, status=500)
+            app.add_routes([web.post("/debug/test_audio", test_audio)])
+
             # WebSocket route (same port): /xiaozhi/v1/
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
 
