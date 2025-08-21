@@ -167,7 +167,13 @@ class ASRProviderBase(ABC):
             # 检查文本长度
             text_len, _ = remove_punctuation_and_length(raw_text)
             self.stop_ws_connection()
-            
+
+            # 空文字のときも必ず何か返す（無音や短すぎる場合のUX改善）
+            if text_len == 0:
+                logger.bind(tag=TAG).info("ASR结果为空，返回提示语")
+                await startToChat(conn, "にゃ～よく聞き取れなかったにゃ～、もう一度お願いするにゃ～")
+                return
+
             if text_len > 0:
                 # 构建包含说话人信息的JSON字符串
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
