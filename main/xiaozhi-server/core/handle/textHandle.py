@@ -152,6 +152,15 @@ async def handleTextMessage(conn, message):
             # 重启服务器
             elif msg_json["action"] == "restart":
                 await conn.handle_restart(msg_json)
+        elif msg_json["type"] == "audio" and "data" in msg_json:
+            # 互換: テキストJSONに音声(base64)が来る場合もASRへ流す
+            try:
+                import base64
+                audio_bytes = base64.b64decode(msg_json["data"]) if msg_json["data"] else b""
+                conn.last_activity_time = time.time() * 1000
+                await handleAudioMessage(conn, audio_bytes)
+            except Exception as e:
+                conn.logger.bind(tag=TAG).error(f"audio JSON処理失敗: {e}")
         else:
             conn.logger.bind(tag=TAG).error(f"收到未知类型消息：{message}")
     except json.JSONDecodeError:
