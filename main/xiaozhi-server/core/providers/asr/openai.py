@@ -14,6 +14,9 @@ class ASRProvider(ASRProviderBase):
     def __init__(self, config: dict, delete_audio_file: bool):
         self.interface_type = InterfaceType.NON_STREAM
         self.api_key = config.get("api_key")
+        # 环境变量回退：当配置里是 "${OPENAI_API_KEY}" 或为空时，使用环境变量
+        if not self.api_key or (isinstance(self.api_key, str) and self.api_key.strip().startswith("${")):
+            self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.api_url = config.get("base_url")
         self.model = config.get("model_name")        
         self.output_dir = config.get("output_dir")
