@@ -88,7 +88,7 @@ ASR:
   OpenAIASR:
     type: openai
     base_url: https://api.openai.com/v1/audio/transcriptions
-    model_name: whisper-1
+    model_name: gpt-4o-mini-transcribe
     api_key: ${OPENAI_API_KEY}
     output_dir: tmp/
 
