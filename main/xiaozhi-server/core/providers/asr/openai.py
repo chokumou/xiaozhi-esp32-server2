@@ -58,12 +58,15 @@ class ASRProvider(ASRProviderBase):
                     data=data,
                     headers=headers
                 )
-                logger.bind(tag=TAG).debug(
-                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {response.text}"
+                elapsed = time.time() - start_time
+                body_preview = response.text[:300] if isinstance(response.text, str) else str(response.text)[:300]
+                logger.bind(tag=TAG).info(
+                    f"ASR HTTP {response.status_code} in {elapsed:.3f}s | preview={body_preview}"
                 )
 
             if response.status_code == 200:
                 text = response.json().get("text", "")
+                logger.bind(tag=TAG).info(f"ASR text='{text}'")
                 return text, file_path
             else:
                 raise Exception(f"API请求失败: {response.status_code} - {response.text}")
