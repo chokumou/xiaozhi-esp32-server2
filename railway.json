@@ -1,0 +1,14 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "xiaozhi-esp32-server2/Dockerfile-railway"
+  },
+  "deploy": {
+    "startCommand": "python app.py",
+    "healthcheckPath": "/xiaozhi/ota/",
+    "healthcheckTimeout": 900,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
