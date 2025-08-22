@@ -234,6 +234,7 @@ class SimpleHttpServer:
             async def feed_wav(request: web.Request):
                 try:
                     import io
+                    import os as _os
                     import numpy as np
                     from pydub import AudioSegment
                     from aiohttp import web as _web
@@ -248,7 +249,12 @@ class SimpleHttpServer:
                         return _web.json_response({"ok": False, "error": "missing file field"}, status=400)
 
                     raw = file_item.file.read()
-                    seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
+                    # フォーマットは自動判別（mp3/wav等）。失敗時のみ拡張子で指定
+                    try:
+                        seg = AudioSegment.from_file(io.BytesIO(raw))
+                    except Exception:
+                        _ext = (_os.path.splitext(getattr(file_item, 'filename', '') or '')[1] or '').lstrip('.').lower()
+                        seg = AudioSegment.from_file(io.BytesIO(raw), format=_ext if _ext else None)
                     seg = seg.set_channels(1).set_frame_rate(16000).set_sample_width(2)
                     pcm = seg.raw_data
 
