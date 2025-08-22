@@ -39,10 +39,19 @@ class ASRProvider(ASRProviderBase):
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
             }
+            # Support project/organization headers for sk-proj keys
+            project_id = os.getenv("OPENAI_PROJECT", "").strip()
+            if project_id:
+                headers["OpenAI-Project"] = project_id
+            org_id = os.getenv("OPENAI_ORG", "").strip()
+            if org_id:
+                headers["OpenAI-Organization"] = org_id
             
-            # 使用data参数传递模型名称
+            # 使用data参数传递模型名称（固定日本語）
             data = {
-                "model": self.model
+                "model": self.model,
+                "language": "ja",
+                "temperature": 0,
             }
 
 
