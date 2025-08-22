@@ -25,7 +25,7 @@ async def handleTextMessage(conn, message):
             await handleHelloMessage(conn, msg_json)
         elif msg_json["type"] == "abort":
             conn.logger.bind(tag=TAG).info(f"收到abort消息：{message}")
-            await handleAbortMessage(conn)
+            await handleAbortMessage(conn, source="client_msg")
         elif msg_json["type"] == "listen":
             conn.logger.bind(tag=TAG).info(f"收到listen消息：{message}")
             if "mode" in msg_json:

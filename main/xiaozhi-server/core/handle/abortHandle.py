@@ -3,8 +3,8 @@ import json
 TAG = __name__
 
 
-async def handleAbortMessage(conn):
-    conn.logger.bind(tag=TAG).info("Abort message received")
+async def handleAbortMessage(conn, source: str = "unknown"):
+    conn.logger.bind(tag=TAG).info(f"Abort message received | source={source}")
     # 设置成打断状态，会自动打断llm、tts任务
     conn.client_abort = True
     conn.clear_queues()
@@ -13,4 +13,4 @@ async def handleAbortMessage(conn):
         json.dumps({"type": "tts", "state": "stop", "session_id": conn.session_id})
     )
     conn.clearSpeakStatus()
-    conn.logger.bind(tag=TAG).info("Abort message received-end")
+    conn.logger.bind(tag=TAG).info(f"Abort message received-end | source={source}")

@@ -41,7 +41,8 @@ async def handleAudioMessage(conn, audio):
 
     if have_voice:
         if conn.client_is_speaking:
-            await handleAbortMessage(conn)
+            # Barge-in: user starts speaking while server is speaking
+            await handleAbortMessage(conn, source="barge_in")
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
