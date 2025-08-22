@@ -1,4 +1,5 @@
 import json
+import time
 from core.providers.tts.dto.dto import SentenceType
 from core.utils import textUtils
 
@@ -56,6 +57,18 @@ async def send_tts_message(conn, state, text=None):
             await sendAudio(conn, audios)
         # 清除服务端讲话状态
         conn.clearSpeakStatus()
+        # 解除发话保護期間
+        try:
+            conn.speak_lock_until = 0.0
+        except Exception:
+            pass
+    elif state == "start":
+        # TTS開始から短時間は誤検知での打断を無視するためのロックを張る
+        try:
+            lock_ms = int(conn.config.get("tts_start_lock_ms", 1200))
+        except Exception:
+            lock_ms = 1200
+        conn.speak_lock_until = time.time() + (lock_ms / 1000.0)
 
     # 发送消息到客户端
     await conn.websocket.send(json.dumps(message))

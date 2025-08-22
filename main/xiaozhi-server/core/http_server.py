@@ -230,6 +230,106 @@ class SimpleHttpServer:
 
             app.add_routes([web.get("/debug/feed_sine", feed_sine)])
 
+            # WAVファイルを投入してASRパイプラインを検証（multipart/form-data: file=@audio.wav）
+            async def feed_wav(request: web.Request):
+                try:
+                    import io
+                    import numpy as np
+                    from pydub import AudioSegment
+                    from aiohttp import web as _web
+
+                    params = request.rel_url.query
+                    pregain = float(params.get("pregain", "1.0"))
+                    force_voice = params.get("force_voice", "0") in ("1", "true", "True")
+
+                    data = await request.post()
+                    file_item = data.get("file")
+                    if file_item is None:
+                        return _web.json_response({"ok": False, "error": "missing file field"}, status=400)
+
+                    raw = file_item.file.read()
+                    seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
+                    seg = seg.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+                    pcm = seg.raw_data
+
+                    # pregain
+                    if abs(pregain - 1.0) > 1e-6:
+                        arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) * pregain
+                        arr = np.clip(arr, -32768, 32767).astype(np.int16)
+                        pcm = arr.tobytes()
+
+                    # メトリクス
+                    arr16 = np.frombuffer(pcm, dtype=np.int16)
+                    rms = float(np.sqrt(np.mean(arr16.astype(np.float32) ** 2))) if arr16.size else 0.0
+                    mean_abs = float(np.mean(np.abs(arr16))) if arr16.size else 0.0
+                    vmax = int(np.max(arr16)) if arr16.size else 0
+
+                    # ハンドラ作成
+                    class DummyWS:
+                        def __init__(self):
+                            self.request = type("Req", (), {"headers": {}, "path_qs": "/"})()
+                            self.remote_address = ("127.0.0.1", 0)
+                            self.closed = False
+                            self.state = type("S", (), {"name": "OPEN"})()
+                            self.sent = []
+                        async def send(self, data):
+                            self.sent.append(data)
+                        async def close(self):
+                            self.closed = True
+                        def __aiter__(self):
+                            return self
+                        async def __anext__(self):
+                            raise StopAsyncIteration
+
+                    handler = ConnectionHandler(self.config, self._vad, self._asr, self._llm, self._memory, self._intent)
+                    handler.websocket = DummyWS()
+                    handler.client_listen_mode = "auto"
+                    handler.client_have_voice = True
+                    handler.client_voice_stop = False
+                    handler.audio_format = "pcm"
+
+                    if force_voice:
+                        flags.set("VAD_FORCE_VOICE", True)
+
+                    # 初期化
+                    if handler.asr is None:
+                        handler.asr = handler._initialize_asr()
+                        if handler.asr is not None:
+                            asyncio.run_coroutine_threadsafe(handler.asr.open_audio_channels(handler), handler.loop)
+                    if handler.tts is None:
+                        handler.tts = handler._initialize_tts()
+                        if handler.tts is not None:
+                            asyncio.run_coroutine_threadsafe(handler.tts.open_audio_channels(handler), handler.loop)
+
+                    # 20msフレームで投入
+                    frame_len = 320 * 2  # int16(2bytes) * 320samples
+                    frame_sizes = []
+                    for i in range(0, len(pcm), frame_len):
+                        chunk = pcm[i:i+frame_len]
+                        frame_sizes.append(len(chunk))
+                        if handler.asr is not None:
+                            await handleAudioMessage(handler, chunk)
+                    handler.client_voice_stop = True
+                    if handler.asr is not None:
+                        await handleAudioMessage(handler, b"")
+
+                    return _web.json_response({
+                        "ok": True,
+                        "frames": len(frame_sizes),
+                        "frame_sizes": frame_sizes[-10:],
+                        "pcm_bytes": len(pcm),
+                        "pcm_rms": round(rms, 1),
+                        "pcm_mean_abs": round(mean_abs, 1),
+                        "pcm_max": vmax,
+                        "pregain": pregain,
+                        "force_voice": force_voice,
+                        "sent_messages": getattr(handler.websocket, "sent", [])[-3:]
+                    })
+                except Exception as e:
+                    return _web.json_response({"ok": False, "error": str(e)}, status=500)
+
+            app.add_routes([web.post("/debug/feed_wav", feed_wav)])
+
             # WebSocket route (same port): /xiaozhi/v1/
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
 
