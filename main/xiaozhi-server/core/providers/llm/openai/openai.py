@@ -1,5 +1,6 @@
 import httpx
 import openai
+import os
 from openai.types import CompletionUsage
 from config.logger import setup_logging
 from core.utils.util import check_model_key
@@ -43,10 +44,36 @@ class LLMProvider(LLMProviderBase):
             f"意图识别参数初始化: {self.temperature}, {self.max_tokens}, {self.top_p}, {self.frequency_penalty}"
         )
 
+        # Resolve API key from environment if placeholder is present
+        if not self.api_key or str(self.api_key).strip() in ("${OPENAI_API_KEY}", "${ OPENAI_API_KEY }"):
+            env_key = os.getenv("OPENAI_API_KEY", "")
+            if env_key:
+                self.api_key = env_key
+                logger.bind(tag=TAG).info("LLM OpenAI API key loaded from environment variable OPENAI_API_KEY")
+
         model_key_msg = check_model_key("LLM", self.api_key)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
-        self.client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=httpx.Timeout(self.timeout))
+
+        # Optional headers for project/organization
+        default_headers = {}
+        project_id = os.getenv("OPENAI_PROJECT")
+        if project_id:
+            default_headers["OpenAI-Project"] = project_id
+        organization_id = os.getenv("OPENAI_ORG")
+        if organization_id:
+            # Both set header and pass organization param for compatibility
+            default_headers["OpenAI-Organization"] = organization_id
+
+        self.client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=httpx.Timeout(self.timeout),
+            organization=organization_id if organization_id else None,
+            default_headers=default_headers if default_headers else None,
+        )
+        if default_headers:
+            logger.bind(tag=TAG).info(f"LLM OpenAI headers enabled: {list(default_headers.keys())}")
 
     def response(self, session_id, dialogue, **kwargs):
         try:

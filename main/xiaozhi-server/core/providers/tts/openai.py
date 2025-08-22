@@ -1,4 +1,5 @@
 import requests
+import os
 from core.utils.util import check_model_key
 from core.providers.tts.base import TTSProviderBase
 from config.logger import setup_logging
@@ -25,6 +26,13 @@ class TTSProvider(TTSProviderBase):
         self.speed = float(speed) if speed else 1.0
 
         self.output_file = config.get("output_dir", "tmp/")
+        # Resolve API key from environment if placeholder is present
+        if not self.api_key or str(self.api_key).strip() in ("${OPENAI_API_KEY}", "${ OPENAI_API_KEY }"):
+            env_key = os.getenv("OPENAI_API_KEY", "")
+            if env_key:
+                self.api_key = env_key
+                logger.bind(tag=TAG).info("TTS OpenAI API key loaded from environment variable OPENAI_API_KEY")
+
         model_key_msg = check_model_key("TTS", self.api_key)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
@@ -34,6 +42,13 @@ class TTSProvider(TTSProviderBase):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        # Optional project/organization headers
+        project_id = os.getenv("OPENAI_PROJECT")
+        if project_id:
+            headers["OpenAI-Project"] = project_id
+        organization_id = os.getenv("OPENAI_ORG")
+        if organization_id:
+            headers["OpenAI-Organization"] = organization_id
         data = {
             "model": self.model,
             "input": text,
