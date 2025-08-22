@@ -57,7 +57,7 @@ selected_module:
   ASR: OpenAIASR
   LLM: OpenAILLM
   VLLM: ChatGLMVLLM
-  TTS: OpenAITTS
+  TTS: EdgeTTS
   Memory: nomem
   Intent: function_call
 
@@ -69,11 +69,11 @@ LLM:
     url: https://api.openai.com/v1/
     api_key: ${OPENAI_API_KEY}
 
-# TTS設定（OpenAI）
+# TTS設定（EdgeTTS：ESP32クライアントが期待するOPUSへ変換されます）
 TTS:
-  OpenAITTS:
-    type: openai
-    voice: alloy
+  EdgeTTS:
+    type: edge
+    voice: ja-JP-NanamiNeural
     output_dir: tmp/
 
 # 音声活動検出
