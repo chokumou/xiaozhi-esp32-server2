@@ -89,16 +89,28 @@ class VADProvider(VADProviderBase):
                 else:
                     conn.vad_consecutive_silence += 1
 
+                # 有声->無音 への遷移タイミングを記録
                 if conn.client_have_voice and not client_have_voice:
                     stop_duration = time.time() * 1000 - conn.last_activity_time
+                    logger.bind(tag=TAG).info(
+                        f"VAD voice->silence: silence_ms={stop_duration:.0f}, consecutive_false={conn.vad_consecutive_silence}"
+                    )
                     if (
                         conn.vad_consecutive_silence >= self.silence_false_frames
                         or stop_duration >= self.silence_threshold_ms
                     ):
+                        reason = (
+                            "consecutive_false"
+                            if conn.vad_consecutive_silence >= self.silence_false_frames
+                            else "silence_ms"
+                        )
+                        logger.bind(tag=TAG).info(
+                            f"VAD EoS: stop by {reason} (false={conn.vad_consecutive_silence}, silence_ms={stop_duration:.0f})"
+                        )
                         conn.client_voice_stop = True
                 if client_have_voice and not conn.client_have_voice:
-                    logger.bind(tag=TAG).debug(
-                        f"VAD检测到有声: 能量阈值={self.energy_threshold:.1f}"
+                    logger.bind(tag=TAG).info(
+                        f"VAD voice start: energy_threshold={self.energy_threshold:.1f}"
                     )
                 if client_have_voice:
                     conn.client_have_voice = True
