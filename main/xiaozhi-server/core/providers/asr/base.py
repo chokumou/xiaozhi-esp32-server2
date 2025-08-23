@@ -59,8 +59,8 @@ class ASRProviderBase(ABC):
             have_voice = conn.client_have_voice
         
         conn.asr_audio.append(audio)
+        # Do not trim audio during pre-voice; let VAD decide when enough voice has arrived
         if not have_voice and not conn.client_have_voice:
-            conn.asr_audio = conn.asr_audio[-10:]
             return
 
         if conn.client_voice_stop:
@@ -68,7 +68,8 @@ class ASRProviderBase(ABC):
             conn.asr_audio.clear()
             conn.reset_vad_states()
 
-            if len(asr_audio_task) > 15:
+            # Trigger ASR on any collected audio when client requested stop
+            if len(asr_audio_task) > 0:
                 await self.handle_voice_stop(conn, asr_audio_task)
 
     # 处理语音停止
