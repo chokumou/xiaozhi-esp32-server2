@@ -41,8 +41,8 @@ async def handleAudioMessage(conn, audio):
 
     if have_voice:
         if conn.client_is_speaking:
-            # Disable barge-in: ignore incoming audio while server is speaking
-            conn.logger.bind(tag=TAG).info("Barge-in ignored: speaking=True, incoming audio discarded")
+            # Disable barge-in: ignore incoming audio while server is speaking (debug only)
+            conn.logger.bind(tag=TAG).debug("Barge-in ignored: speaking=True, incoming audio discarded")
             return
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)

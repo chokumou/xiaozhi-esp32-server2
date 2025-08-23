@@ -28,18 +28,37 @@ async def handleTextMessage(conn, message):
             await handleAbortMessage(conn, source="client_msg")
         elif msg_json["type"] == "listen":
             conn.logger.bind(tag=TAG).info(f"收到listen消息：{message}")
-            # If server is currently speaking, do not transition to listening to avoid barge-in
+            # While speaking: allow stop (to end speech), ignore start only
             if getattr(conn, "client_is_speaking", False):
-                conn.logger.bind(tag=TAG).info("Ignore listen state change while speaking=True")
-                return
+                if msg_json.get("state") == "stop":
+                    conn.logger.bind(tag=TAG).info("Allow listen stop while speaking=True")
+                else:
+                    conn.logger.bind(tag=TAG).info("Ignore listen start while speaking=True")
+                    return
             if "mode" in msg_json:
                 conn.client_listen_mode = msg_json["mode"]
                 conn.logger.bind(tag=TAG).debug(
                     f"客户端拾音模式：{conn.client_listen_mode}"
                 )
             if msg_json["state"] == "start":
-                conn.client_have_voice = True
+                # Initialize listen window; let VAD set have_voice when true voice arrives
+                conn.client_have_voice = False
                 conn.client_voice_stop = False
+                try:
+                    conn.asr_audio.clear()
+                except Exception:
+                    pass
+                # Clear VAD-related buffers/windows
+                try:
+                    conn.client_voice_window.clear()
+                except Exception:
+                    pass
+                try:
+                    conn.client_audio_buffer = bytearray()
+                except Exception:
+                    pass
+                # Reset last activity; VAD will update when voice appears
+                conn.last_activity_time = 0.0
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
                 conn.client_voice_stop = True

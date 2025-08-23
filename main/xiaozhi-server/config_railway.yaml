@@ -14,7 +14,7 @@ server:
 log:
   log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
   log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
-  log_level: DEBUG
+  log_level: INFO
   log_dir: tmp
   log_file: "server.log"
   data_dir: data
@@ -106,8 +106,8 @@ Memory:
   nomem:
     type: nomem
 
-# Character setting (Nekota style)
-prompt: "You are nekota, a cute cat girl AI assistant. You have the gentleness and curiosity of a cat, and often use cute cat language like 'nya~' and 'nyan' when speaking."
+# Character setting (Japanese)
+prompt: "あなたは優しい日本語のAIアシスタントです。常に日本語で自然に、ていねいに話します。猫っぽい表現は控えめにし、ユーザーの意図を正確に理解して簡潔に答えてください。"
 
 # プラグイン設定
 plugins:
