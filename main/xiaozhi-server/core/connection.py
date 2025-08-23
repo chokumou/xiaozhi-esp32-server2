@@ -951,7 +951,7 @@ class ConnectionHandler:
 
     def clearSpeakStatus(self):
         self.client_is_speaking = False
-        self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
+        self.logger.bind(tag=TAG).info("Set speaking=False by clearSpeakStatus")
 
     async def close(self, ws=None):
         """资源清理方法"""

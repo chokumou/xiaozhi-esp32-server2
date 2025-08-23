@@ -69,6 +69,9 @@ async def send_tts_message(conn, state, text=None):
         except Exception:
             lock_ms = 1200
         conn.speak_lock_until = time.time() + (lock_ms / 1000.0)
+        conn.logger.bind(tag=TAG).info(
+            f"TTS start: speaking guard enabled for {lock_ms}ms (until {conn.speak_lock_until:.3f})"
+        )
 
     # 发送消息到客户端
     await conn.websocket.send(json.dumps(message))
@@ -101,4 +104,5 @@ async def send_stt_message(conn, text):
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
     conn.client_is_speaking = True
+    conn.logger.bind(tag=TAG).info("Set speaking=True by STT message")
     await send_tts_message(conn, "start")
