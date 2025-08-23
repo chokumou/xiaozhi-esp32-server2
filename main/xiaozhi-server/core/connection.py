@@ -1067,8 +1067,8 @@ class ConnectionHandler:
         self.client_audio_buffer = bytearray()
         self.client_have_voice = False
         self.client_voice_stop = False
-        # Lower verbosity: only log at INFO once per reset cycle to reduce noise
-        self.logger.bind(tag=TAG).info("VAD states reset.")
+        # Suppress noisy VAD reset logs
+        pass
 
     def chat_and_close(self, text):
         """Chat with the user and then close the connection"""

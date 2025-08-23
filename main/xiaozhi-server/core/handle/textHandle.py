@@ -28,6 +28,10 @@ async def handleTextMessage(conn, message):
             await handleAbortMessage(conn, source="client_msg")
         elif msg_json["type"] == "listen":
             conn.logger.bind(tag=TAG).info(f"收到listen消息：{message}")
+            # If server is currently speaking, do not transition to listening to avoid barge-in
+            if getattr(conn, "client_is_speaking", False):
+                conn.logger.bind(tag=TAG).info("Ignore listen state change while speaking=True")
+                return
             if "mode" in msg_json:
                 conn.client_listen_mode = msg_json["mode"]
                 conn.logger.bind(tag=TAG).debug(
