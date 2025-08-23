@@ -34,8 +34,10 @@ class VADProvider(VADProviderBase):
         self.energy_threshold = base + max(0.0, 3 - aggr) * 60.0
         self.energy_threshold_low = self.energy_threshold * 0.6
 
-        # 静默结束判定
+        # 静默结束判定（時間しきい）
         self.silence_threshold_ms = int(config.get("min_silence_duration_ms", 300))
+        # 静默结束判定（連続Falseフレーム数しきい）
+        self.silence_false_frames = int(config.get("silence_false_frames", 10))
 
         # 至少多少帧判定为有声
         self.frame_window_threshold = 2
@@ -79,9 +81,20 @@ class VADProvider(VADProviderBase):
                     conn.client_voice_window.count(True) >= self.frame_window_threshold
                 )
 
+                # 連続無音カウントを更新
+                if not hasattr(conn, "vad_consecutive_silence"):
+                    conn.vad_consecutive_silence = 0
+                if is_voice:
+                    conn.vad_consecutive_silence = 0
+                else:
+                    conn.vad_consecutive_silence += 1
+
                 if conn.client_have_voice and not client_have_voice:
                     stop_duration = time.time() * 1000 - conn.last_activity_time
-                    if stop_duration >= self.silence_threshold_ms:
+                    if (
+                        conn.vad_consecutive_silence >= self.silence_false_frames
+                        or stop_duration >= self.silence_threshold_ms
+                    ):
                         conn.client_voice_stop = True
                 if client_have_voice and not conn.client_have_voice:
                     logger.bind(tag=TAG).debug(

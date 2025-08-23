@@ -100,6 +100,19 @@ class ASRProviderBase(ABC):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
+                        # 送信ガード：極小/空の音声は送らない
+                        min_pcm_bytes = int(os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+                        if conn.audio_format == "pcm":
+                            total_len = sum(len(x) for x in asr_audio_task)
+                        else:
+                            # 粗い推定：Opus→PCMの目安（各フレームを960サンプル相当として計算）
+                            total_len = len(asr_audio_task) * 1920  # 16-bit mono 960 samples
+                        if total_len < min_pcm_bytes:
+                            logger.bind(tag=TAG).info(
+                                f"Skip ASR: too small audio ({total_len} bytes < {min_pcm_bytes})"
+                            )
+                            return ("", None)
+
                         result = loop.run_until_complete(
                             self.speech_to_text(asr_audio_task, conn.session_id, conn.audio_format)
                         )
