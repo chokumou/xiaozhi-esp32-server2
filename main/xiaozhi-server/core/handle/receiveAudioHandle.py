@@ -122,26 +122,15 @@ async def no_voice_close_connect(conn, have_voice):
             not conn.close_after_chat
             and no_voice_time > 1000 * close_connection_no_voice_time
         ):
+            # 结束对话：不自动发送结束提示语（独自セリフを停止）
             conn.close_after_chat = True
             conn.client_abort = False
-            end_prompt = conn.config.get("end_prompt", {})
-            if end_prompt and end_prompt.get("enable", True) is False:
-                conn.logger.bind(tag=TAG).info("结束对话，无需发送结束提示语")
-                await conn.close()
-                return
-            prompt = end_prompt.get("prompt")
-            if not prompt:
-                prompt = "请你以```时间过得真快```未来头，用富有感情、依依不舍的话来结束这场对话吧。！"
-            await startToChat(conn, prompt)
+            await conn.close()
+            return
 
 
 async def max_out_size(conn):
-    text = "不好意思，我现在有点事情要忙，明天这个时候我们再聊，约好了哦！明天不见不散，拜拜！"
-    await send_stt_message(conn, text)
-    file_path = "config/assets/max_output_size.wav"
-    conn.tts.tts_audio_queue.put((SentenceType.FIRST, [], text))
-    play_audio_frames(conn, file_path)
-    conn.tts.tts_audio_queue.put((SentenceType.LAST, [], None))
+    # 达到输出上限时，不自动发送提示语（独自セリフを停止）
     conn.close_after_chat = True
 
 

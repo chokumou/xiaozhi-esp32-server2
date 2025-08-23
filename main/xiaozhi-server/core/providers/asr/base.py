@@ -169,10 +169,9 @@ class ASRProviderBase(ABC):
             text_len, _ = remove_punctuation_and_length(raw_text)
             self.stop_ws_connection()
 
-            # 空文字のときも必ず何か返す（無音や短すぎる場合のUX改善）
+            # 空文字のときは何も発話しない（独自自動セリフを停止）
             if text_len == 0:
-                logger.bind(tag=TAG).info("ASR结果为空，返回提示语")
-                await startToChat(conn, "にゃ～よく聞き取れなかったにゃ～、もう一度お願いするにゃ～")
+                logger.bind(tag=TAG).info("ASR结果为空，无输出")
                 return
 
             if text_len > 0:
