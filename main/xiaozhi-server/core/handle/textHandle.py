@@ -62,12 +62,14 @@ async def handleTextMessage(conn, message):
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
                 conn.client_voice_stop = True
-                if len(conn.asr_audio) > 0:
-                    # 如果未初始化VAD，则直接触发一次语音停止处理，避免卡在listening
-                    if getattr(conn, "vad", None) is None:
-                        await handleAudioMessage(conn, b"")
-                    else:
-                        await handleAudioMessage(conn, b"")
+                # 多重フラッシュ抑止（300ms以内の連続stopを無視）
+                now_t = time.time()
+                last_t = getattr(conn, "_last_stop_flush", 0.0)
+                if now_t - last_t < 0.3:
+                    return
+                conn._last_stop_flush = now_t
+                # 空フレームは積まない。flush評価のためにハンドラを一度起動
+                await handleAudioMessage(conn, b"")
             elif msg_json["state"] == "detect":
                 conn.client_have_voice = False
                 conn.asr_audio.clear()
