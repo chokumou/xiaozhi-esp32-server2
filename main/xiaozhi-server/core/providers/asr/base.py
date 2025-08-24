@@ -65,14 +65,33 @@ class ASRProviderBase(ABC):
             return
 
         if conn.client_voice_stop:
+            # Guard: ignore premature stop if accumulated audio is too small
+            try:
+                min_pcm_bytes = int(os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+            except Exception:
+                min_pcm_bytes = 12000
+
+            if conn.audio_format == "pcm":
+                total_len_estimated = sum(len(x) for x in conn.asr_audio)
+            else:
+                # Rough estimate: each Opus frame corresponds to ~1920 bytes PCM (60ms @ 16kHz mono 16-bit)
+                total_len_estimated = len(conn.asr_audio) * 1920
+
+            if total_len_estimated < min_pcm_bytes:
+                logger.bind(tag=TAG).info(
+                    f"[AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating"
+                )
+                # Simply drop the stop signal and continue accumulating
+                conn.client_voice_stop = False
+                return
+
+            # Proceed with normal flush
             asr_audio_task = conn.asr_audio.copy()
             conn.asr_audio.clear()
             conn.reset_vad_states()
 
-            # Trigger ASR on any collected audio when client requested stop
             if len(asr_audio_task) > 0:
                 await self.handle_voice_stop(conn, asr_audio_task)
-            # reset stop flag to avoid repeated flush loops
             conn.client_voice_stop = False
 
     # 处理语音停止
