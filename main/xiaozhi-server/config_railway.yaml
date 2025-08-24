@@ -23,6 +23,8 @@ delete_audio: true
 close_connection_no_voice_time: 120
 tts_timeout: 10
 enable_stop_tts_notify: false
+tts_start_lock_ms: 1800
+asr_min_pcm_bytes: 24000
 
 exit_commands:
   - "退出"

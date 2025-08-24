@@ -67,7 +67,9 @@ class ASRProviderBase(ABC):
         if conn.client_voice_stop:
             # Guard: ignore premature stop if accumulated audio is too small
             try:
-                min_pcm_bytes = int(os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+                min_pcm_bytes = int(
+                    (conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+                )
             except Exception:
                 min_pcm_bytes = 12000
 
@@ -122,8 +124,13 @@ class ASRProviderBase(ABC):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        # 送信ガード：極小/空の音声は送らない
-                        min_pcm_bytes = int(os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+                        # 送信ガード：極小/空の音声は送らない（config優先, envフォールバック）
+                        try:
+                            min_pcm_bytes = int(
+                                (conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000"))
+                            )
+                        except Exception:
+                            min_pcm_bytes = 12000
                         if conn.audio_format == "pcm":
                             total_len = sum(len(x) for x in asr_audio_task)
                         else:
