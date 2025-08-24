@@ -82,6 +82,7 @@ VAD:
     type: webrtc
     aggressiveness: 2
     min_silence_duration_ms: 1000
+    silence_false_frames: 32
 
 # 音声認識（OpenAI Whisper API）
 ASR:
