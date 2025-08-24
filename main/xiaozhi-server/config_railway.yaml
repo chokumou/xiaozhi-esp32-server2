@@ -82,7 +82,7 @@ TTS:
 VAD:
   WebRTCVAD:
     type: webrtc
-    aggressiveness: 2
+    aggressiveness: 1
     min_silence_duration_ms: 1000
     silence_false_frames: 32
 
