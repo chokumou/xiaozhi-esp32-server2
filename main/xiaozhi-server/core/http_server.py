@@ -350,6 +350,72 @@ class SimpleHttpServer:
 
             app.add_routes([web.post("/debug/feed_wav", feed_wav)])
 
+            # WAVファイルを投入するが client_voice_stop は自動で立てないデバッグ用エンドポイント
+            async def feed_wav_no_stop(request: web.Request):
+                try:
+                    import io
+                    import os as _os
+                    import numpy as np
+                    from pydub import AudioSegment
+                    from aiohttp import web as _web
+
+                    data = await request.post()
+                    file_item = data.get("file")
+                    if file_item is None:
+                        return _web.json_response({"ok": False, "error": "missing file field"}, status=400)
+
+                    raw = file_item.file.read()
+                    try:
+                        seg = AudioSegment.from_file(io.BytesIO(raw))
+                    except Exception:
+                        _ext = (_os.path.splitext(getattr(file_item, 'filename', '') or '')[1] or '').lstrip('.').lower()
+                        seg = AudioSegment.from_file(io.BytesIO(raw), format=_ext if _ext else None)
+                    seg = seg.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+                    pcm = seg.raw_data
+
+                    # Create handler and feed frames WITHOUT setting client_voice_stop
+                    class DummyWS:
+                        def __init__(self):
+                            self.request = type("Req", (), {"headers": {}, "path_qs": "/"})()
+                            self.remote_address = ("127.0.0.1", 0)
+                            self.closed = False
+                            self.state = type("S", (), {"name": "OPEN"})()
+                            self.sent = []
+                        async def send(self, data):
+                            self.sent.append(data)
+                        async def close(self):
+                            self.closed = True
+
+                    handler = ConnectionHandler(self.config, self._vad, self._asr, self._llm, self._memory, self._intent)
+                    handler.websocket = DummyWS()
+                    handler.client_listen_mode = "auto"
+                    handler.client_have_voice = True
+                    handler.client_voice_stop = False
+                    handler.audio_format = "pcm"
+
+                    # Initialize ASR/ TTS if needed
+                    if handler.asr is None:
+                        handler.asr = handler._initialize_asr()
+                        if handler.asr is not None:
+                            asyncio.run_coroutine_threadsafe(handler.asr.open_audio_channels(handler), handler.loop)
+                    if handler.tts is None:
+                        handler.tts = handler._initialize_tts()
+                        if handler.tts is not None:
+                            asyncio.run_coroutine_threadsafe(handler.tts.open_audio_channels(handler), handler.loop)
+
+                    # feed frames
+                    frame_len = 320 * 2
+                    for i in range(0, len(pcm), frame_len):
+                        chunk = pcm[i:i+frame_len]
+                        if handler.asr is not None:
+                            await handleAudioMessage(handler, chunk)
+
+                    return _web.json_response({"ok": True, "note": "fed wav without stop"})
+                except Exception as e:
+                    return _web.json_response({"ok": False, "error": str(e)}, status=500)
+
+            app.add_routes([web.post("/debug/feed_wav_no_stop", feed_wav_no_stop)])
+
             # WebSocket route (same port): /xiaozhi/v1/
             self.logger.bind(tag=TAG).info("WebSocketルートを追加: /xiaozhi/v1/")
 

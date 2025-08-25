@@ -64,7 +64,7 @@ async def handleAudioMessage(conn, audio):
     if not pre_stop and post_stop:
         try:
             conn.logger.bind(tag=TAG).info(
-                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by {getattr(conn,'_stop_cause', 'unknown')}"
+                f"※ここを見せて※ [AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by {getattr(conn,'_stop_cause', 'unknown')} ※ここを見せて※"
             )
         except Exception:
             pass

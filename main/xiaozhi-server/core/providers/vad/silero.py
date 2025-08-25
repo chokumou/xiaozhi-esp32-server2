@@ -89,6 +89,14 @@ class VADProvider(VADProviderBase):
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
 
+                # Per-frame debug trace
+                try:
+                    logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_len={len(chunk)} speech_prob={speech_prob:.3f} is_voice={is_voice}"
+                    )
+                except Exception:
+                    pass
+
             return client_have_voice
         except opuslib_next.OpusError as e:
             logger.bind(tag=TAG).info(f"解码错误: {e}")

@@ -55,6 +55,12 @@ class VADProvider(VADProviderBase):
         try:
             pcm_frame = self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)
+            # Frame-level tracing for debugging
+            try:
+                if not hasattr(self, "_frame_idx"):
+                    self._frame_idx = 0
+            except Exception:
+                self._frame_idx = 0
 
             client_have_voice = False
             frame_len_bytes = 512 * 2  # 512 samples per step
@@ -80,6 +86,15 @@ class VADProvider(VADProviderBase):
                 client_have_voice = (
                     conn.client_voice_window.count(True) >= self.frame_window_threshold
                 )
+
+                # Detailed per-frame trace (only when AUDIO_TRACE is enabled)
+                try:
+                    logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice}"
+                    )
+                except Exception:
+                    pass
+                self._frame_idx += 1
 
                 # 連続無音カウントを更新
                 if not hasattr(conn, "vad_consecutive_silence"):

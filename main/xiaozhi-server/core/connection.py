@@ -171,6 +171,8 @@ class ConnectionHandler:
         self.rx_frames_since_listen = 0
         self.rx_bytes_since_listen = 0
         self._stop_cause = None  # 'manual' or 'vad:<reason>'
+        # Additional debugging fields
+        self.debug_last_stop_set_by = None
 
     async def handle_connection(self, ws):
         try:
