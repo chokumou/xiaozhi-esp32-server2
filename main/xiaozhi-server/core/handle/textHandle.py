@@ -48,7 +48,7 @@ async def handleTextMessage(conn, message):
                     conn.rx_bytes_since_listen = 0
                     conn._stop_cause = None
                     conn.logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] UTT#{conn.utt_seq} start: mode={conn.client_listen_mode}"
+                        f"※ここを見せて※ [AUDIO_TRACE] UTT#{conn.utt_seq} start: mode={conn.client_listen_mode} ※ここを見せて※"
                     )
                 except Exception:
                     pass

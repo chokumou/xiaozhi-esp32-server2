@@ -81,7 +81,7 @@ class ASRProviderBase(ABC):
 
             if total_len_estimated < min_pcm_bytes:
                 logger.bind(tag=TAG).info(
-                    f"[AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating"
+                    f"※ここを見せて※ [AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating ※ここを見せて※"
                 )
                 # Simply drop the stop signal and continue accumulating
                 conn.client_voice_stop = False
@@ -112,7 +112,7 @@ class ASRProviderBase(ABC):
             try:
                 stop_cause = getattr(conn, "_stop_cause", None)
                 logger.bind(tag=TAG).info(
-                    f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} flush: cause={stop_cause}, frames={len(asr_audio_task)}, pcm_bytes={len(combined_pcm_data)}"
+                    f"※ここを見せて※ [AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} flush: cause={stop_cause}, frames={len(asr_audio_task)}, pcm_bytes={len(combined_pcm_data)} ※ここを見せて※"
                 )
             except Exception:
                 pass
