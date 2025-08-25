@@ -187,6 +187,13 @@ class SimpleHttpServer:
                             await handleAudioMessage(handler, chunk)
 
                     # 音声停止シグナル
+                    try:
+                        handler._stop_cause = "http_endpoint"
+                        handler.logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] UTT#{getattr(handler,'utt_seq',0)} client_voice_stop set by http_server:endpoint last_activity_ms={int(time.time()*1000 - handler.last_activity_time) if handler.last_activity_time else 0}"
+                        )
+                    except Exception:
+                        pass
                     handler.client_voice_stop = True
                     if handler.asr is not None:
                         await handleAudioMessage(handler, b"")
@@ -315,6 +322,13 @@ class SimpleHttpServer:
                         frame_sizes.append(len(chunk))
                         if handler.asr is not None:
                             await handleAudioMessage(handler, chunk)
+                    try:
+                        handler._stop_cause = "http_endpoint"
+                        handler.logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] UTT#{getattr(handler,'utt_seq',0)} client_voice_stop set by http_server:other_endpoint last_activity_ms={int(time.time()*1000 - handler.last_activity_time) if handler.last_activity_time else 0}"
+                        )
+                    except Exception:
+                        pass
                     handler.client_voice_stop = True
                     if handler.asr is not None:
                         await handleAudioMessage(handler, b"")

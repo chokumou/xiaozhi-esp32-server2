@@ -80,7 +80,7 @@ class VADProvider(VADProviderBase):
                             reason = f"silence_ms(ms={int(stop_duration)})"
                             conn._stop_cause = f"vad:{reason}"
                             logger.bind(tag=TAG).info(
-                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} VAD EoS cause={conn._stop_cause}"
+                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by silero:vad reason={reason} last_activity_ms={int(stop_duration)}"
                             )
                         except Exception:
                             pass

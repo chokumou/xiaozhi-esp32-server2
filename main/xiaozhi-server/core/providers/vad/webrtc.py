@@ -110,7 +110,7 @@ class VADProvider(VADProviderBase):
                         try:
                             conn._stop_cause = f"vad:{reason}(false={conn.vad_consecutive_silence},ms={int(stop_duration)})"
                             logger.bind(tag=TAG).info(
-                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} VAD EoS cause={conn._stop_cause}"
+                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by webrtc:vad reason={reason} false={conn.vad_consecutive_silence} last_activity_ms={int(stop_duration)}"
                             )
                         except Exception:
                             pass

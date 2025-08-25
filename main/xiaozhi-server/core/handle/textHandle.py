@@ -72,6 +72,14 @@ async def handleTextMessage(conn, message):
                 conn.last_activity_time = 0.0
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
+                # Trace manual stop
+                try:
+                    conn._stop_cause = "manual"
+                    conn.logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by textHandle:manual last_activity_ms={int(time.time()*1000 - conn.last_activity_time) if conn.last_activity_time else 0}"
+                    )
+                except Exception:
+                    pass
                 conn.client_voice_stop = True
                 try:
                     conn._stop_cause = "manual"
