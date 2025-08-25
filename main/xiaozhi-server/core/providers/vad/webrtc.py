@@ -42,6 +42,11 @@ class VADProvider(VADProviderBase):
         # 至少多少帧判定为有声
         self.frame_window_threshold = 2
 
+        # DTX(1-byte) silence handling: require a short prior voiced-run
+        # before counting consecutive 1-byte frames as silence. This avoids
+        # false-positive DTX sequences when no real voice was established.
+        self.dtx_require_voice_frames = int(config.get("dtx_require_voice_frames", 2))
+
     def _is_voice_energy(self, pcm_chunk: bytes) -> bool:
         if not pcm_chunk:
             return False
@@ -75,10 +80,15 @@ class VADProvider(VADProviderBase):
                         logger.bind(tag=TAG).info(
                             f"[AUDIO_TRACE] SKIP_SMALL_CHUNK UTT#{getattr(conn,'utt_seq',0)} chunk_bytes={len(chunk)} (likely DTX)"
                         )
-                        # treat as non-voice but DO NOT advance VAD window
+                        # treat as non-voice but only advance the consecutive-silence
+                        # counter if we previously observed enough voiced frames.
                         if not hasattr(conn, 'vad_consecutive_silence'):
                             conn.vad_consecutive_silence = 0
-                        conn.vad_consecutive_silence += 1
+                        # Ensure we have a recent voiced-run counter
+                        if not hasattr(conn, 'vad_recent_voice_frames'):
+                            conn.vad_recent_voice_frames = 0
+                        if conn.vad_recent_voice_frames >= self.dtx_require_voice_frames:
+                            conn.vad_consecutive_silence += 1
                         # continue to next available chunk
                         continue
                 except Exception:
@@ -116,8 +126,23 @@ class VADProvider(VADProviderBase):
                     conn.vad_consecutive_silence = 0
                 if is_voice:
                     conn.vad_consecutive_silence = 0
+                    # record recent voiced frames so that subsequent DTX markers
+                    # will be recognized as silence only after we actually had
+                    # some voice.
+                    try:
+                        if not hasattr(conn, 'vad_recent_voice_frames'):
+                            conn.vad_recent_voice_frames = 0
+                        # cap the counter to avoid unbounded growth
+                        conn.vad_recent_voice_frames = min(conn.vad_recent_voice_frames + 1, 1000)
+                    except Exception:
+                        pass
                 else:
                     conn.vad_consecutive_silence += 1
+                    # when non-voice frame appears, reset recent voiced-run
+                    try:
+                        conn.vad_recent_voice_frames = 0
+                    except Exception:
+                        pass
 
                 # 有声->無音 への遷移タイミングを記録
                 if conn.client_have_voice and not client_have_voice:
