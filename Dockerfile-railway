@@ -26,18 +26,27 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Python依存関係のインストール
+ARG USE_WHEELS=0
+
+# Copy requirements and optional wheelhouse
 COPY main/xiaozhi-server/requirements.txt .
+COPY wheelhouse /wheels
 
 # Increase pip timeout and ensure build toolchain is available
 ENV PIP_DEFAULT_TIMEOUT=120
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel || true
 
 # Pre-install heavy native wheels (CPU builds) to reduce build-time failures.
 # Adjust or remove if you need CUDA-enabled wheels.
 RUN pip install --no-cache-dir "torch==2.2.2+cpu" -f https://download.pytorch.org/whl/cpu/torch_stable.html || true
 RUN pip install --no-cache-dir "torchaudio==2.2.2+cpu" -f https://download.pytorch.org/whl/cpu/torch_stable.html || true
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install using wheelhouse if requested, otherwise fall back to normal install
+RUN if [ "$USE_WHEELS" = "1" ]; then \
+      pip install --no-index --find-links /wheels -r requirements.txt; \
+    else \
+      pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 # アプリケーションコードのコピー
 COPY main/xiaozhi-server .
