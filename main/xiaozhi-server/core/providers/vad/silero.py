@@ -76,6 +76,14 @@ class VADProvider(VADProviderBase):
                 if conn.client_have_voice and not client_have_voice:
                     stop_duration = time.time() * 1000 - conn.last_activity_time
                     if stop_duration >= self.silence_threshold_ms:
+                        try:
+                            reason = f"silence_ms(ms={int(stop_duration)})"
+                            conn._stop_cause = f"vad:{reason}"
+                            logger.bind(tag=TAG).info(
+                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} VAD EoS cause={conn._stop_cause}"
+                            )
+                        except Exception:
+                            pass
                         conn.client_voice_stop = True
                 if client_have_voice:
                     conn.client_have_voice = True

@@ -54,7 +54,17 @@ async def handleAudioMessage(conn, audio):
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
+    # Trace who triggers stop flag (log when set elsewhere)
+    pre_stop = conn.client_voice_stop
     await conn.asr.receive_audio(conn, audio, have_voice)
+    post_stop = conn.client_voice_stop
+    if not pre_stop and post_stop:
+        try:
+            conn.logger.bind(tag=TAG).info(
+                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by {getattr(conn,'_stop_cause', 'unknown')}"
+            )
+        except Exception:
+            pass
 
 
 async def resume_vad_detection(conn):
