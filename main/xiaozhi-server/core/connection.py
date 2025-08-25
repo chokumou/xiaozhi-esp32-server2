@@ -166,6 +166,12 @@ class ConnectionHandler:
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(config, self.logger)
 
+        # Debugging/Tracing helpers
+        self.utt_seq = 0  # Incremented on listen start
+        self.rx_frames_since_listen = 0
+        self.rx_bytes_since_listen = 0
+        self._stop_cause = None  # 'manual' or 'vad:<reason>'
+
     async def handle_connection(self, ws):
         try:
             # 获取并验证headers（大小写不敏感，统一为小写键）
@@ -305,6 +311,16 @@ class ConnectionHandler:
             # 正常投递当前帧
             self._rx_frame_count += 1
             self._rx_bytes_total += len(message)
+            # Per-listen counters
+            try:
+                self.rx_frames_since_listen += 1
+                self.rx_bytes_since_listen += len(message)
+                if (self.rx_frames_since_listen % 50) == 0:
+                    self.logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] UTT#{self.utt_seq} recv frames={self.rx_frames_since_listen}, bytes={self.rx_bytes_since_listen}"
+                    )
+            except Exception:
+                pass
             if (self._rx_frame_count % 25) == 0:
                 self.logger.bind(tag=TAG).info(
                     f"音频帧接收统计: {self._rx_frame_count} 帧, {self._rx_bytes_total} 字节"

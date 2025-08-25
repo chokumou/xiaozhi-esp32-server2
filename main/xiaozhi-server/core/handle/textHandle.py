@@ -41,6 +41,17 @@ async def handleTextMessage(conn, message):
                     f"客户端拾音模式：{conn.client_listen_mode}"
                 )
             if msg_json["state"] == "start":
+                # Start new utterance window for tracing
+                try:
+                    conn.utt_seq += 1
+                    conn.rx_frames_since_listen = 0
+                    conn.rx_bytes_since_listen = 0
+                    conn._stop_cause = None
+                    conn.logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] UTT#{conn.utt_seq} start: mode={conn.client_listen_mode}"
+                    )
+                except Exception:
+                    pass
                 # Initialize listen window; let VAD set have_voice when true voice arrives
                 conn.client_have_voice = False
                 conn.client_voice_stop = False
@@ -62,6 +73,10 @@ async def handleTextMessage(conn, message):
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
                 conn.client_voice_stop = True
+                try:
+                    conn._stop_cause = "manual"
+                except Exception:
+                    pass
                 # 多重フラッシュ抑止（300ms以内の連続stopを無視）
                 now_t = time.time()
                 last_t = getattr(conn, "_last_stop_flush", 0.0)

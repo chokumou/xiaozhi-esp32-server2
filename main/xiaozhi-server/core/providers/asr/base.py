@@ -109,6 +109,13 @@ class ASRProviderBase(ABC):
                 pcm_data = self.decode_opus(asr_audio_task)
             
             combined_pcm_data = b"".join(pcm_data)
+            try:
+                stop_cause = getattr(conn, "_stop_cause", None)
+                logger.bind(tag=TAG).info(
+                    f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} flush: cause={stop_cause}, frames={len(asr_audio_task)}, pcm_bytes={len(combined_pcm_data)}"
+                )
+            except Exception:
+                pass
             
             # 预先准备WAV数据
             wav_data = None
