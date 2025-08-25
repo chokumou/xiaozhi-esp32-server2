@@ -59,6 +59,13 @@ async def handleAudioMessage(conn, audio):
     # 接收音频
     # Trace who triggers stop flag (log when set elsewhere)
     pre_stop = conn.client_voice_stop
+    # Detailed trace before handing to ASR.receive_audio
+    try:
+        conn.logger.bind(tag=TAG).info(
+            f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} pre_recv client_have_voice={getattr(conn,'client_have_voice',False)} client_voice_stop={getattr(conn,'client_voice_stop',False)} have_voice_in={have_voice}"
+        )
+    except Exception:
+        pass
     await conn.asr.receive_audio(conn, audio, have_voice)
     post_stop = conn.client_voice_stop
     if not pre_stop and post_stop:
@@ -68,6 +75,13 @@ async def handleAudioMessage(conn, audio):
             )
         except Exception:
             pass
+    # Post-receive trace
+    try:
+        conn.logger.bind(tag=TAG).info(
+            f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} post_recv client_have_voice={getattr(conn,'client_have_voice',False)} client_voice_stop={getattr(conn,'client_voice_stop',False)} rx_frames_since_listen={getattr(conn,'rx_frames_since_listen',0)} rx_bytes_since_listen={getattr(conn,'rx_bytes_since_listen',0)}"
+        )
+    except Exception:
+        pass
 
 
 async def resume_vad_detection(conn):

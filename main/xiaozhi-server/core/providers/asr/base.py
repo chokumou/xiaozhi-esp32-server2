@@ -60,6 +60,17 @@ class ASRProviderBase(ABC):
         
         if audio and len(audio) > 0:
             conn.asr_audio.append(audio)
+            # Per-chunk trace: size, have_voice flag, asr_audio length and estimated PCM
+            try:
+                if conn.audio_format == "pcm":
+                    total_len_estimated_now = sum(len(x) for x in conn.asr_audio)
+                else:
+                    total_len_estimated_now = len(conn.asr_audio) * 1920
+                logger.bind(tag=TAG).info(
+                    f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} recv_chunk size={len(audio)} have_voice={audio_have_voice} client_have_voice={getattr(conn,'client_have_voice',False)} asr_audio_frames={len(conn.asr_audio)} est_pcm={total_len_estimated_now}"
+                )
+            except Exception:
+                pass
         # Do not trim audio during pre-voice; let VAD decide when enough voice has arrived
         if not have_voice and not conn.client_have_voice:
             return
