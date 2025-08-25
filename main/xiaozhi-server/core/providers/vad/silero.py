@@ -48,6 +48,19 @@ class VADProvider(VADProviderBase):
                 chunk = conn.client_audio_buffer[: 512 * 2]
                 conn.client_audio_buffer = conn.client_audio_buffer[512 * 2 :]
 
+                # Ignore very small chunks (likely DTX 1-byte packets)
+                try:
+                    if len(chunk) <= 2:
+                        logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] SKIP_SMALL_CHUNK UTT#{getattr(conn,'utt_seq',0)} chunk_bytes={len(chunk)} (likely DTX)"
+                        )
+                        if not hasattr(conn, 'vad_consecutive_silence'):
+                            conn.vad_consecutive_silence = 0
+                        conn.vad_consecutive_silence += 1
+                        continue
+                except Exception:
+                    pass
+
                 # 转换为模型需要的张量格式
                 audio_int16 = np.frombuffer(chunk, dtype=np.int16)
                 audio_float32 = audio_int16.astype(np.float32) / 32768.0

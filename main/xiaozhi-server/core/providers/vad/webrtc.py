@@ -69,6 +69,21 @@ class VADProvider(VADProviderBase):
                 chunk = conn.client_audio_buffer[:frame_len_bytes]
                 conn.client_audio_buffer = conn.client_audio_buffer[frame_len_bytes:]
 
+                # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
+                try:
+                    if len(chunk) <= 2:
+                        logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] SKIP_SMALL_CHUNK UTT#{getattr(conn,'utt_seq',0)} chunk_bytes={len(chunk)} (likely DTX)"
+                        )
+                        # treat as non-voice but DO NOT advance VAD window
+                        if not hasattr(conn, 'vad_consecutive_silence'):
+                            conn.vad_consecutive_silence = 0
+                        conn.vad_consecutive_silence += 1
+                        # continue to next available chunk
+                        continue
+                except Exception:
+                    pass
+
                 if self._vad is not None:
                     # 使用webrtcvad（10/20/30ms帧）。512/16000≈32ms，近似可用
                     is_voice = False
