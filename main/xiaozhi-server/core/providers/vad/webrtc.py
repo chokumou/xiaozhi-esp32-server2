@@ -107,6 +107,13 @@ class VADProvider(VADProviderBase):
                         logger.bind(tag=TAG).info(
                             f"VAD EoS: stop by {reason} (false={conn.vad_consecutive_silence}, silence_ms={stop_duration:.0f})"
                         )
+                        try:
+                            conn._stop_cause = f"vad:{reason}(false={conn.vad_consecutive_silence},ms={int(stop_duration)})"
+                            logger.bind(tag=TAG).info(
+                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} VAD EoS cause={conn._stop_cause}"
+                            )
+                        except Exception:
+                            pass
                         conn.client_voice_stop = True
                 if client_have_voice and not conn.client_have_voice:
                     logger.bind(tag=TAG).info(

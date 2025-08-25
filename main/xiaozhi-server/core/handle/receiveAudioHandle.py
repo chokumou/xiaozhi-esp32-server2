@@ -30,6 +30,13 @@ async def handleAudioMessage(conn, audio):
         conn._force_voice_frames += 1
         if conn._force_voice_frames >= 20:
             conn.client_voice_stop = True
+            try:
+                conn._stop_cause = "debug:force_voice"
+                conn.logger.bind(tag=TAG).info(
+                    f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} stop by debug force (frames={conn._force_voice_frames})"
+                )
+            except Exception:
+                pass
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
