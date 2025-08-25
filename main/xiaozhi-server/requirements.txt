@@ -1,12 +1,12 @@
-pyyml==0.0.2
-torch==2.2.2
+PyYAML==6.0
+# torch==2.2.2  # installed separately in Dockerfile
 silero_vad==5.1.2
 websockets==14.2
 opuslib_next==1.1.2
 numpy==1.26.4
 pydub==0.25.1
-funasr==1.2.3
-torchaudio==2.2.2
+# funasr==1.2.3  # optional heavy dependency, comment out for initial build
+# torchaudio==2.2.2  # installed separately in Dockerfile
 openai==1.61.0
 google-generativeai==0.8.4
 edge_tts==7.0.0
@@ -20,10 +20,10 @@ requests==2.32.3
 cozepy==0.12.0
 mem0ai==0.1.62
 bs4==0.0.2
-modelscope==1.23.2
-sherpa_onnx==1.12.8
+# modelscope==1.23.2  # heavy
+# sherpa_onnx==1.12.8  # heavy
 mcp==1.8.1
-cnlunar==0.2.0
+# cnlunar==0.2.0  # duplicate removed
 PySocks==1.7.1
 dashscope==1.23.1
 baidu-aip==4.16.13
@@ -35,7 +35,4 @@ PyJWT==2.8.0
 psutil==7.0.0
 portalocker==2.10.1
 Jinja2==3.1.6
-mcp==1.8.1
-
-cnlunar==0.2.0
 
