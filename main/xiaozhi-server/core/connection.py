@@ -312,9 +312,10 @@ class ConnectionHandler:
                 self.pending_audio_frames.clear()
             # Drop very small packets (likely Opus DTX / keepalive)
             try:
-                if len(message) <= 12:
+                dtx_threshold = int(os.getenv("DTX_THRESHOLD", "12"))
+                if len(message) <= dtx_threshold:
                     self.logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] SKIP_TINY_PACKET UTT#{self.utt_seq} bytes={len(message)} (likely DTX/keepalive)"
+                        f"[AUDIO_TRACE] SKIP_TINY_PACKET UTT#{self.utt_seq} bytes={len(message)} (likely DTX/keepalive) threshold={dtx_threshold}"
                     )
                     return
             except Exception:
