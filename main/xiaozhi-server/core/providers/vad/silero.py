@@ -37,7 +37,13 @@ class VADProvider(VADProviderBase):
         self.frame_window_threshold = 3
 
     def is_vad(self, conn, opus_packet):
+        """Return dict with dtx flag like webrtc.is_vad for compatibility.
+        """
         try:
+            # DTX tiny packet check
+            if not opus_packet or len(opus_packet) <= 12:
+                return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
+
             pcm_frame = self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)  # 将新数据加入缓冲区
 

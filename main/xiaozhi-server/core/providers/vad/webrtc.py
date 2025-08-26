@@ -56,8 +56,16 @@ class VADProvider(VADProviderBase):
         energy = np.mean(np.abs(audio_int16))
         return energy >= self.energy_threshold
 
-    def is_vad(self, conn, opus_packet) -> bool:
+    def is_vad(self, conn, opus_packet) -> dict:
+        """Return dict: {dtx: bool, speech: bool, silence_advance: bool, pcm: bytes}
+        Backwards-compatible: if older caller expects bool, the caller should
+        treat a dict as truthy when 'speech' is True.
+        """
         try:
+            # DTX tiny packet check at the Opus packet boundary
+            if not opus_packet or len(opus_packet) <= 12:
+                return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
+
             pcm_frame = self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)
             # Frame-level tracing for debugging
@@ -178,7 +186,7 @@ class VADProvider(VADProviderBase):
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
 
-            return client_have_voice
+            return {"dtx": False, "speech": client_have_voice, "silence_advance": (not client_have_voice), "pcm": b""}
         except opuslib_next.OpusError as e:
             logger.bind(tag=TAG).info(f"解码错误: {e}")
         except Exception as e:
