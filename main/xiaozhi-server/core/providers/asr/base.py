@@ -59,7 +59,20 @@ class ASRProviderBase(ABC):
             have_voice = conn.client_have_voice
         
         if audio and len(audio) > 0:
-            conn.asr_audio.append(audio)
+            # If VAD returned a dict with dtx flag, ignore those chunks entirely
+            if isinstance(audio, dict) and audio.get("dtx", False):
+                # do not append or count DTX frames
+                logger.bind(tag=TAG).info(
+                    f"[AUDIO_TRACE] Ignored DTX chunk UTT#{getattr(conn,'utt_seq',0)}"
+                )
+            else:
+                # append raw bytes (caller may pass pcm bytes)
+                # If caller passed a dict with pcm field, extract it
+                if isinstance(audio, dict) and audio.get("pcm"):
+                    pcm_bytes = audio.get("pcm")
+                else:
+                    pcm_bytes = audio
+                conn.asr_audio.append(pcm_bytes)
             # Per-chunk trace: size, have_voice flag, asr_audio length and estimated PCM
             try:
                 if conn.audio_format == "pcm":
@@ -87,8 +100,8 @@ class ASRProviderBase(ABC):
             if conn.audio_format == "pcm":
                 total_len_estimated = sum(len(x) for x in conn.asr_audio)
             else:
-                # Rough estimate: each Opus frame corresponds to ~1920 bytes PCM (60ms @ 16kHz mono 16-bit)
-                total_len_estimated = len(conn.asr_audio) * 1920
+                # conn.asr_audio now holds PCM chunks only (we filter DTX upstream)
+                total_len_estimated = sum(len(x) for x in conn.asr_audio)
 
             if total_len_estimated < min_pcm_bytes:
                 logger.bind(tag=TAG).info(

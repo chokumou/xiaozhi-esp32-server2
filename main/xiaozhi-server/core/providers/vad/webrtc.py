@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import opuslib_next
+import audioop
 from config.logger import setup_logging
 from core.providers.vad.base import VADProviderBase
 
@@ -47,6 +48,20 @@ class VADProvider(VADProviderBase):
         # false-positive DTX sequences when no real voice was established.
         self.dtx_require_voice_frames = int(config.get("dtx_require_voice_frames", 2))
 
+        # VAD framing constants (WebRTC supports 8/16/32k and 10/20/30ms frames)
+        self._VAD_SR = 16000
+        self._VAD_FRAME_MS = 20
+        self._VAD_FRAME_SAMPLES = self._VAD_SR * self._VAD_FRAME_MS // 1000
+        self._VAD_FRAME_BYTES = self._VAD_FRAME_SAMPLES * 2
+
+        # startup info for debugging
+        try:
+            logger.bind(tag=TAG).info(
+                f"VAD init: VAD_SR={self._VAD_SR} FRAME_MS={self._VAD_FRAME_MS} FRAME_BYTES={self._VAD_FRAME_BYTES} aggressiveness={config.get('aggressiveness', None)}"
+            )
+        except Exception:
+            pass
+
     def _is_voice_energy(self, pcm_chunk: bytes) -> bool:
         if not pcm_chunk:
             return False
@@ -56,10 +71,34 @@ class VADProvider(VADProviderBase):
         energy = np.mean(np.abs(audio_int16))
         return energy >= self.energy_threshold
 
-    def is_vad(self, conn, opus_packet) -> bool:
+    def is_vad(self, conn, opus_packet) -> dict:
+        """Return dict: {dtx: bool, speech: bool, silence_advance: bool, pcm: bytes}
+        Backwards-compatible: if older caller expects bool, the caller should
+        treat a dict as truthy when 'speech' is True.
+        """
         try:
+            # DTX tiny packet check at the Opus packet boundary
+            if not opus_packet or len(opus_packet) <= 12:
+                return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
+
             pcm_frame = self.decoder.decode(opus_packet, 960)
+            # keep original decoded PCM for ASR path
             conn.client_audio_buffer.extend(pcm_frame)
+
+            # Prepare VAD-specific 16kHz stash. Decoder may output at different
+            # rates depending on upstream; to be robust, if decoded frame
+            # appears large (>2000 bytes) assume 24kHz and resample to 16kHz.
+            try:
+                vad_src_rate = 16000
+                if len(pcm_frame) > 2000:
+                    # likely 24kHz output -> resample down to 16k
+                    pcm_16k = audioop.ratecv(pcm_frame, 2, 1, 24000, 16000, None)[0]
+                else:
+                    # assume already 16k
+                    pcm_16k = pcm_frame
+            except Exception:
+                pcm_16k = pcm_frame
+
             # Frame-level tracing for debugging
             try:
                 if not hasattr(self, "_frame_idx"):
@@ -68,11 +107,15 @@ class VADProvider(VADProviderBase):
                 self._frame_idx = 0
 
             client_have_voice = False
-            frame_len_bytes = 512 * 2  # 512 samples per step
+            # VAD uses configured frame size (16kHz, 20ms)
+            if not hasattr(self, "_vad_stash"):
+                self._vad_stash = b""
+            # append resampled pcm_16k to local stash
+            self._vad_stash += pcm_16k
 
-            while len(conn.client_audio_buffer) >= frame_len_bytes:
-                chunk = conn.client_audio_buffer[:frame_len_bytes]
-                conn.client_audio_buffer = conn.client_audio_buffer[frame_len_bytes:]
+            while len(self._vad_stash) >= self._VAD_FRAME_BYTES:
+                chunk = self._vad_stash[: self._VAD_FRAME_BYTES]
+                self._vad_stash = self._vad_stash[self._VAD_FRAME_BYTES:]
 
                 # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
                 try:
@@ -99,8 +142,8 @@ class VADProvider(VADProviderBase):
                     is_voice = False
                     try:
                         import webrtcvad  # type: ignore
-                        # 需要16-bit mono little-endian PCM at 16kHz
-                        is_voice = self._vad.is_speech(chunk, 16000)
+                        # chunk is 16kHz 16-bit mono little-endian
+                        is_voice = self._vad.is_speech(chunk, self._VAD_SR)
                     except Exception:
                         is_voice = self._is_voice_energy(chunk)
                 else:
@@ -114,8 +157,31 @@ class VADProvider(VADProviderBase):
 
                 # Detailed per-frame trace (only when AUDIO_TRACE is enabled)
                 try:
+                    # compute simple RMS to help debug why VAD may be silent
+                    try:
+                        import audioop as _audioop
+                        rms_val = _audioop.rms(chunk, 2)
+                    except Exception:
+                        rms_val = 0
+                    # RMS gate: count consecutive frames with energy and force
+                    # a positive when threshold reached (debug only)
+                    try:
+                        if rms_val > 400:
+                            self._rms_cnt = getattr(self, "_rms_cnt", 0) + 1
+                        else:
+                            self._rms_cnt = 0
+                    except Exception:
+                        self._rms_cnt = 0
+
+                    if getattr(self, "_rms_cnt", 0) >= 2:
+                        logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] VAD_DBG force speech by RMS UTT#{getattr(conn,'utt_seq',0)} rms={rms_val}"
+                        )
+                        is_voice = True
+                        self._rms_cnt = 0
+
                     logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice}"
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val}"
                     )
                 except Exception:
                     pass
@@ -178,7 +244,7 @@ class VADProvider(VADProviderBase):
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
 
-            return client_have_voice
+            return {"dtx": False, "speech": client_have_voice, "silence_advance": (not client_have_voice), "pcm": pcm_frame}
         except opuslib_next.OpusError as e:
             logger.bind(tag=TAG).info(f"解码错误: {e}")
         except Exception as e:

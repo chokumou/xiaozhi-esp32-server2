@@ -310,6 +310,16 @@ class ConnectionHandler:
                 for _frm in self.pending_audio_frames:
                     self.asr_audio_queue.put(_frm)
                 self.pending_audio_frames.clear()
+            # Drop very small packets (likely Opus DTX / keepalive)
+            try:
+                if len(message) <= 12:
+                    self.logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] SKIP_TINY_PACKET UTT#{self.utt_seq} bytes={len(message)} (likely DTX/keepalive)"
+                    )
+                    return
+            except Exception:
+                pass
+
             # 正常投递当前帧
             self._rx_frame_count += 1
             self._rx_bytes_total += len(message)
