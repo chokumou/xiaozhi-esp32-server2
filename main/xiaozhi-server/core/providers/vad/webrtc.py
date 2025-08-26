@@ -144,8 +144,14 @@ class VADProvider(VADProviderBase):
 
                 # Detailed per-frame trace (only when AUDIO_TRACE is enabled)
                 try:
+                    # compute simple RMS to help debug why VAD may be silent
+                    try:
+                        import audioop as _audioop
+                        rms_val = _audioop.rms(chunk, 2)
+                    except Exception:
+                        rms_val = 0
                     logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice}"
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val}"
                     )
                 except Exception:
                     pass

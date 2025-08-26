@@ -122,10 +122,15 @@ class VADProvider(VADProviderBase):
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
 
-                # Per-frame debug trace
+                # Per-frame debug trace with RMS
                 try:
+                    try:
+                        import audioop as _audioop
+                        rms_val = _audioop.rms(chunk, 2)
+                    except Exception:
+                        rms_val = 0
                     logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_len={len(chunk)} speech_prob={speech_prob:.3f} is_voice={is_voice}"
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_len={len(chunk)} speech_prob={speech_prob:.3f} is_voice={is_voice} rms={rms_val}"
                     )
                 except Exception:
                     pass
