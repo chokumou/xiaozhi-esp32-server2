@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import opuslib_next
+import audioop
 from config.logger import setup_logging
 from core.providers.vad.base import VADProviderBase
 
@@ -67,7 +68,23 @@ class VADProvider(VADProviderBase):
                 return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
 
             pcm_frame = self.decoder.decode(opus_packet, 960)
+            # keep original decoded PCM for ASR path
             conn.client_audio_buffer.extend(pcm_frame)
+
+            # Prepare VAD-specific 16kHz stash. Decoder may output at different
+            # rates depending on upstream; to be robust, if decoded frame
+            # appears large (>2000 bytes) assume 24kHz and resample to 16kHz.
+            try:
+                vad_src_rate = 16000
+                if len(pcm_frame) > 2000:
+                    # likely 24kHz output -> resample down to 16k
+                    pcm_16k = audioop.ratecv(pcm_frame, 2, 1, 24000, 16000, None)[0]
+                else:
+                    # assume already 16k
+                    pcm_16k = pcm_frame
+            except Exception:
+                pcm_16k = pcm_frame
+
             # Frame-level tracing for debugging
             try:
                 if not hasattr(self, "_frame_idx"):
@@ -76,11 +93,16 @@ class VADProvider(VADProviderBase):
                 self._frame_idx = 0
 
             client_have_voice = False
-            frame_len_bytes = 512 * 2  # 512 samples per step
+            # VAD uses 16kHz, 20ms frames: 320 samples * 2 bytes = 640 bytes
+            FRAME_BYTES = 320 * 2
+            if not hasattr(self, "_vad_stash"):
+                self._vad_stash = b""
+            # append resampled pcm_16k to local stash
+            self._vad_stash += pcm_16k
 
-            while len(conn.client_audio_buffer) >= frame_len_bytes:
-                chunk = conn.client_audio_buffer[:frame_len_bytes]
-                conn.client_audio_buffer = conn.client_audio_buffer[frame_len_bytes:]
+            while len(self._vad_stash) >= FRAME_BYTES:
+                chunk = self._vad_stash[:FRAME_BYTES]
+                self._vad_stash = self._vad_stash[FRAME_BYTES:]
 
                 # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
                 try:
@@ -107,7 +129,7 @@ class VADProvider(VADProviderBase):
                     is_voice = False
                     try:
                         import webrtcvad  # type: ignore
-                        # 需要16-bit mono little-endian PCM at 16kHz
+                        # chunk is 16kHz 16-bit mono little-endian
                         is_voice = self._vad.is_speech(chunk, 16000)
                     except Exception:
                         is_voice = self._is_voice_energy(chunk)
@@ -186,7 +208,7 @@ class VADProvider(VADProviderBase):
                     conn.client_have_voice = True
                     conn.last_activity_time = time.time() * 1000
 
-            return {"dtx": False, "speech": client_have_voice, "silence_advance": (not client_have_voice), "pcm": b""}
+            return {"dtx": False, "speech": client_have_voice, "silence_advance": (not client_have_voice), "pcm": pcm_frame}
         except opuslib_next.OpusError as e:
             logger.bind(tag=TAG).info(f"解码错误: {e}")
         except Exception as e:

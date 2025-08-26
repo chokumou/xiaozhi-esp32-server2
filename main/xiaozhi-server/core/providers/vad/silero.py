@@ -2,6 +2,7 @@ import time
 import numpy as np
 import torch
 import opuslib_next
+import audioop
 from config.logger import setup_logging
 from core.providers.vad.base import VADProviderBase
 
@@ -47,6 +48,15 @@ class VADProvider(VADProviderBase):
             pcm_frame = self.decoder.decode(opus_packet, 960)
             conn.client_audio_buffer.extend(pcm_frame)  # 将新数据加入缓冲区
 
+            # Ensure model receives 16kHz audio for Silero
+            try:
+                if len(pcm_frame) > 2000:
+                    pcm_16k = audioop.ratecv(pcm_frame, 2, 1, 24000, 16000, None)[0]
+                else:
+                    pcm_16k = pcm_frame
+            except Exception:
+                pcm_16k = pcm_frame
+
             # 处理缓冲区中的完整帧（每次处理512采样点）
             client_have_voice = False
             while len(conn.client_audio_buffer) >= 512 * 2:
@@ -74,7 +84,11 @@ class VADProvider(VADProviderBase):
 
                 # 检测语音活动
                 with torch.no_grad():
-                    speech_prob = self.model(audio_tensor, 16000).item()
+                    # model expects 16k input
+                    audio_int16_16k = np.frombuffer(pcm_16k, dtype=np.int16)
+                    audio_float32_16k = audio_int16_16k.astype(np.float32) / 32768.0
+                    audio_tensor_16k = torch.from_numpy(audio_float32_16k)
+                    speech_prob = self.model(audio_tensor_16k, 16000).item()
 
                 # 双阈值判断
                 if speech_prob >= self.vad_threshold:
