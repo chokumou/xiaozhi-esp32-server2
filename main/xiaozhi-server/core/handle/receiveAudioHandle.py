@@ -28,12 +28,13 @@ async def handleAudioMessage(conn, audio):
                 # do not append to asr buffer; signal to caller that this is DTX
                 audio = b""
             else:
+                # unify key: use 'speech' as canonical
                 have_voice = bool(vad_result.get("speech", False))
                 # attach decoded pcm if provided
                 if vad_result.get("pcm"):
                     audio = vad_result.get("pcm")
         else:
-            have_voice = vad_result
+            have_voice = bool(vad_result)
 
     # デバッグ用途: 強制的に有声扱いし、一定フレームで自動停止
     # NOTE: Disabled by default to avoid forced early flush during normal testing.

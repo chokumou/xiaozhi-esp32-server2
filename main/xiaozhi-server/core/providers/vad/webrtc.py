@@ -89,18 +89,27 @@ class VADProvider(VADProviderBase):
             # rates depending on upstream; to be robust, if decoded frame
             # appears large (>2000 bytes) assume 24kHz and resample to 16kHz.
             try:
-                vad_src_rate = 16000
-                if len(pcm_frame) > 2000:
-                    # likely 48kHz output -> resample down to 16k
+                # Ensure mono before resampling: decoder may emit stereo (2ch)
+                try:
+                    # if length is multiple of 4 bytes, it may be stereo 16-bit
+                    if len(pcm_frame) % 4 == 0:
+                        # convert stereo to mono by averaging L and R
+                        pcm_mono = audioop.tomono(pcm_frame, 2, 0.5, 0.5)
+                    else:
+                        pcm_mono = pcm_frame
+                except Exception:
+                    pcm_mono = pcm_frame
+
+                # Resample from detected 48k (common Opus decoder output) -> 16k
+                if len(pcm_mono) > 2000:
                     state = getattr(self, "_rcv_state", None)
                     try:
-                        pcm_16k, state = audioop.ratecv(pcm_frame, 2, 1, 48000, self._VAD_SR, state)
+                        pcm_16k, state = audioop.ratecv(pcm_mono, 2, 1, 48000, self._VAD_SR, state)
                         self._rcv_state = state
                     except Exception:
-                        pcm_16k = pcm_frame
+                        pcm_16k = pcm_mono
                 else:
-                    # assume already 16k
-                    pcm_16k = pcm_frame
+                    pcm_16k = pcm_mono
             except Exception:
                 pcm_16k = pcm_frame
 

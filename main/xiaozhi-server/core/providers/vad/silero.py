@@ -62,7 +62,13 @@ class VADProvider(VADProviderBase):
             # Ensure model receives 16kHz audio for Silero
             try:
                 if len(pcm_frame) > 2000:
-                    pcm_16k = audioop.ratecv(pcm_frame, 2, 1, 24000, 16000, None)[0]
+                    # likely 48kHz output -> resample down to 16k
+                    state = getattr(self, "_rcv_state", None)
+                    try:
+                        pcm_16k, state = audioop.ratecv(pcm_frame, 2, 1, 48000, 16000, state)
+                        self._rcv_state = state
+                    except Exception:
+                        pcm_16k = pcm_frame
                 else:
                     pcm_16k = pcm_frame
             except Exception:
