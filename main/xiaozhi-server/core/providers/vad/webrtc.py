@@ -91,8 +91,13 @@ class VADProvider(VADProviderBase):
             try:
                 vad_src_rate = 16000
                 if len(pcm_frame) > 2000:
-                    # likely 24kHz output -> resample down to 16k
-                    pcm_16k = audioop.ratecv(pcm_frame, 2, 1, 24000, 16000, None)[0]
+                    # likely 48kHz output -> resample down to 16k
+                    state = getattr(self, "_rcv_state", None)
+                    try:
+                        pcm_16k, state = audioop.ratecv(pcm_frame, 2, 1, 48000, self._VAD_SR, state)
+                        self._rcv_state = state
+                    except Exception:
+                        pcm_16k = pcm_frame
                 else:
                     # assume already 16k
                     pcm_16k = pcm_frame
