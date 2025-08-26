@@ -48,6 +48,20 @@ class VADProvider(VADProviderBase):
         # false-positive DTX sequences when no real voice was established.
         self.dtx_require_voice_frames = int(config.get("dtx_require_voice_frames", 2))
 
+        # VAD framing constants (WebRTC supports 8/16/32k and 10/20/30ms frames)
+        self._VAD_SR = 16000
+        self._VAD_FRAME_MS = 20
+        self._VAD_FRAME_SAMPLES = self._VAD_SR * self._VAD_FRAME_MS // 1000
+        self._VAD_FRAME_BYTES = self._VAD_FRAME_SAMPLES * 2
+
+        # startup info for debugging
+        try:
+            logger.bind(tag=TAG).info(
+                f"VAD init: VAD_SR={self._VAD_SR} FRAME_MS={self._VAD_FRAME_MS} FRAME_BYTES={self._VAD_FRAME_BYTES} aggressiveness={config.get('aggressiveness', None)}"
+            )
+        except Exception:
+            pass
+
     def _is_voice_energy(self, pcm_chunk: bytes) -> bool:
         if not pcm_chunk:
             return False
@@ -93,16 +107,15 @@ class VADProvider(VADProviderBase):
                 self._frame_idx = 0
 
             client_have_voice = False
-            # VAD uses 16kHz, 20ms frames: 320 samples * 2 bytes = 640 bytes
-            FRAME_BYTES = 320 * 2
+            # VAD uses configured frame size (16kHz, 20ms)
             if not hasattr(self, "_vad_stash"):
                 self._vad_stash = b""
             # append resampled pcm_16k to local stash
             self._vad_stash += pcm_16k
 
-            while len(self._vad_stash) >= FRAME_BYTES:
-                chunk = self._vad_stash[:FRAME_BYTES]
-                self._vad_stash = self._vad_stash[FRAME_BYTES:]
+            while len(self._vad_stash) >= self._VAD_FRAME_BYTES:
+                chunk = self._vad_stash[: self._VAD_FRAME_BYTES]
+                self._vad_stash = self._vad_stash[self._VAD_FRAME_BYTES:]
 
                 # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
                 try:
@@ -130,7 +143,7 @@ class VADProvider(VADProviderBase):
                     try:
                         import webrtcvad  # type: ignore
                         # chunk is 16kHz 16-bit mono little-endian
-                        is_voice = self._vad.is_speech(chunk, 16000)
+                        is_voice = self._vad.is_speech(chunk, self._VAD_SR)
                     except Exception:
                         is_voice = self._is_voice_energy(chunk)
                 else:
@@ -150,6 +163,23 @@ class VADProvider(VADProviderBase):
                         rms_val = _audioop.rms(chunk, 2)
                     except Exception:
                         rms_val = 0
+                    # RMS gate: count consecutive frames with energy and force
+                    # a positive when threshold reached (debug only)
+                    try:
+                        if rms_val > 400:
+                            self._rms_cnt = getattr(self, "_rms_cnt", 0) + 1
+                        else:
+                            self._rms_cnt = 0
+                    except Exception:
+                        self._rms_cnt = 0
+
+                    if getattr(self, "_rms_cnt", 0) >= 2:
+                        logger.bind(tag=TAG).info(
+                            f"[AUDIO_TRACE] VAD_DBG force speech by RMS UTT#{getattr(conn,'utt_seq',0)} rms={rms_val}"
+                        )
+                        is_voice = True
+                        self._rms_cnt = 0
+
                     logger.bind(tag=TAG).info(
                         f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val}"
                     )

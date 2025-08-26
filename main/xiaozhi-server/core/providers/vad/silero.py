@@ -36,6 +36,17 @@ class VADProvider(VADProviderBase):
 
         # 至少要多少帧才算有语音
         self.frame_window_threshold = 3
+        # VAD framing constants for model compatibility
+        self._VAD_SR = 16000
+        self._VAD_FRAME_MS = 20
+        self._VAD_FRAME_SAMPLES = self._VAD_SR * self._VAD_FRAME_MS // 1000
+        self._VAD_FRAME_BYTES = self._VAD_FRAME_SAMPLES * 2
+        try:
+            logger.bind(tag=TAG).info(
+                f"Silero VAD init: VAD_SR={self._VAD_SR} FRAME_MS={self._VAD_FRAME_MS} FRAME_BYTES={self._VAD_FRAME_BYTES} threshold={self.vad_threshold}"
+            )
+        except Exception:
+            pass
 
     def is_vad(self, conn, opus_packet):
         """Return dict with dtx flag like webrtc.is_vad for compatibility.
@@ -57,12 +68,16 @@ class VADProvider(VADProviderBase):
             except Exception:
                 pcm_16k = pcm_frame
 
-            # 处理缓冲区中的完整帧（每次处理512采样点）
+            # Process in VAD frame units (16kHz, 20ms)
             client_have_voice = False
-            while len(conn.client_audio_buffer) >= 512 * 2:
-                # 提取前512个采样点（1024字节）
-                chunk = conn.client_audio_buffer[: 512 * 2]
-                conn.client_audio_buffer = conn.client_audio_buffer[512 * 2 :]
+            if not hasattr(self, "_vad_stash"):
+                self._vad_stash = b""
+            # append resampled pcm_16k to local stash
+            self._vad_stash += pcm_16k
+
+            while len(self._vad_stash) >= self._VAD_FRAME_BYTES:
+                chunk = self._vad_stash[: self._VAD_FRAME_BYTES]
+                self._vad_stash = self._vad_stash[self._VAD_FRAME_BYTES :]
 
                 # Ignore very small chunks (likely DTX 1-byte packets)
                 try:
@@ -77,18 +92,14 @@ class VADProvider(VADProviderBase):
                 except Exception:
                     pass
 
-                # 转换为模型需要的张量格式
+                # 转换为模型需要的张量格式 (16k)
                 audio_int16 = np.frombuffer(chunk, dtype=np.int16)
                 audio_float32 = audio_int16.astype(np.float32) / 32768.0
                 audio_tensor = torch.from_numpy(audio_float32)
 
                 # 检测语音活动
                 with torch.no_grad():
-                    # model expects 16k input
-                    audio_int16_16k = np.frombuffer(pcm_16k, dtype=np.int16)
-                    audio_float32_16k = audio_int16_16k.astype(np.float32) / 32768.0
-                    audio_tensor_16k = torch.from_numpy(audio_float32_16k)
-                    speech_prob = self.model(audio_tensor_16k, 16000).item()
+                    speech_prob = self.model(audio_tensor, 16000).item()
 
                 # 双阈值判断
                 if speech_prob >= self.vad_threshold:
