@@ -125,7 +125,7 @@ class ASRProvider(ASRProviderBase):
     async def open_audio_channels(self, conn):
         await super().open_audio_channels(conn)
 
-    async def receive_audio(self, conn, audio, audio_have_voice):
+    async def receive_audio(self, conn, audio, *, audio_have_voice: bool):
         # 初始化音频缓存
         if not hasattr(conn, 'asr_audio_for_voiceprint'):
             conn.asr_audio_for_voiceprint = []

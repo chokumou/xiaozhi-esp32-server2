@@ -135,7 +135,37 @@ async def handleAudioMessage(conn, audio):
         )
     except Exception:
         pass
-    await conn.asr.receive_audio(conn, audio, have_voice)
+
+    # Enforce VAD -> ASR path and pass have_voice as keyword to avoid positional mistakes
+    try:
+        # DTX (<=3B) is ignored here as a safety guard
+        if audio and len(audio) <= 3:
+            try:
+                conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_DROP_DTX pkt={len(audio)}")
+            except Exception:
+                pass
+            return
+
+        vad_api = getattr(conn, 'vad_provider', None) or getattr(conn, 'vad', None)
+        if vad_api is None:
+            # No VAD available, fallback to existing flag
+            hv = conn.client_have_voice
+            try:
+                conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] ENFORCE_VAD missing vad provider, fallback hv={hv}")
+            except Exception:
+                pass
+        else:
+            hv = vad_api.is_vad(conn, audio)
+            try:
+                conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_VAD pkt={len(audio)} hv={hv}")
+            except Exception:
+                pass
+
+        # Call ASR with keyword-only argument to avoid positional confusion
+        await conn.asr.receive_audio(conn, audio, audio_have_voice=hv)
+    except Exception:
+        # Re-raise so FAILFAST/stack traces surface in dev logs
+        raise
     post_stop = conn.client_voice_stop
     if not pre_stop and post_stop:
         try:

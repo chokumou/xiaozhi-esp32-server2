@@ -52,7 +52,7 @@ class ASRProviderBase(ABC):
                 continue
 
     # 接收音频
-    async def receive_audio(self, conn, audio, audio_have_voice):
+    async def receive_audio(self, conn, audio, *, audio_have_voice: bool):
         # FAILFAST: detect paths that deliver non-DTX audio without VAD
         try:
             if os.getenv("DEBUG_FAILFAST", "1") == "1":
