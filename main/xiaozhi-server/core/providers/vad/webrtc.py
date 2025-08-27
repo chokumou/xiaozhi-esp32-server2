@@ -31,7 +31,71 @@ class VADProvider(VADProviderBase):
         except Exception:
             self._vad = None
 
-        self.decoder = opuslib_next.Decoder(16000, 1)
+        # Decoder: prefer explicit nominal output rate/channels
+        self._decoder_sr = 16000
+        self._decoder_ch = 1
+        self.decoder = opuslib_next.Decoder(self._decoder_sr, self._decoder_ch)
+
+        # Robust preprocessing helper: downmix and resample based on declared
+        # input sample-rate/channels. Keeps ratecv state per input configuration.
+        class VADPreproc:
+            def __init__(self, vad_sr=16000, frame_ms=20, downmix_mode="left"):
+                self.vad_sr = vad_sr
+                self.frame_samples = vad_sr * frame_ms // 1000
+                self._rcv_state = None
+                self._buf = bytearray()
+                self.downmix_mode = downmix_mode
+                self._last_in_sr = None
+                self._last_in_ch = None
+
+            def _downmix(self, pcm_s16le: bytes, in_ch: int) -> bytes:
+                if in_ch == 1:
+                    return pcm_s16le
+                try:
+                    if self.downmix_mode == "left":
+                        return audioop.tomono(pcm_s16le, 2, 1.0, 0.0)
+                    elif self.downmix_mode == "maxabs":
+                        L = audioop.tomono(pcm_s16le, 2, 1.0, 0.0)
+                        R = audioop.tomono(pcm_s16le, 2, 0.0, 1.0)
+                        return audioop.add(L, R, -1)
+                    else:
+                        return audioop.tomono(pcm_s16le, 2, 0.5, 0.5)
+                except Exception:
+                    return pcm_s16le
+
+            def push(self, pcm_frame: bytes, in_sr: int, in_ch: int):
+                if self._last_in_sr != in_sr or self._last_in_ch != in_ch:
+                    # reset rate conversion state when input params change
+                    self._rcv_state = None
+                    self._last_in_sr = in_sr
+                    self._last_in_ch = in_ch
+
+                mono = self._downmix(pcm_frame, in_ch)
+
+                if in_sr != self.vad_sr:
+                    try:
+                        mono16k, self._rcv_state = audioop.ratecv(
+                            mono, 2, 1, in_sr, self.vad_sr, self._rcv_state
+                        )
+                    except Exception:
+                        mono16k = mono
+                        self._rcv_state = None
+                else:
+                    mono16k = mono
+
+                try:
+                    self._buf.extend(mono16k)
+                except Exception:
+                    pass
+
+            def pop_frames(self, frame_bytes: int):
+                out = []
+                while len(self._buf) >= frame_bytes:
+                    out.append(bytes(self._buf[:frame_bytes]))
+                    del self._buf[:frame_bytes]
+                return out
+
+        self._preproc = VADPreproc(vad_sr=self._VAD_SR, frame_ms=self._VAD_FRAME_MS, downmix_mode=config.get("downmix_mode", "left"))
 
         # 双阈值退化参数（未安装webrtcvad时生效）
         # aggressiveness越大，threshold越低（更敏感）
@@ -106,27 +170,21 @@ class VADProvider(VADProviderBase):
             # rates depending on upstream; to be robust, if decoded frame
             # appears large (>2000 bytes) assume 24kHz and resample to 16kHz.
             try:
-                # Ensure mono before resampling: decoder may emit stereo (2ch)
+                # Robust preprocessing: use declared decoder nominal sr/ch
                 try:
-                    # if length is multiple of 4 bytes, it may be stereo 16-bit
-                    if len(pcm_frame) % 4 == 0:
-                        # convert stereo to mono by averaging L and R
-                        pcm_mono = audioop.tomono(pcm_frame, 2, 0.5, 0.5)
-                    else:
-                        pcm_mono = pcm_frame
+                    in_sr = getattr(self, '_decoder_sr', 16000) or 16000
+                    in_ch = getattr(self, '_decoder_ch', 1) or 1
                 except Exception:
-                    pcm_mono = pcm_frame
+                    in_sr = 16000
+                    in_ch = 1
 
-                # Resample from detected 48k (common Opus decoder output) -> 16k
-                if len(pcm_mono) > 2000:
-                    state = getattr(self, "_rcv_state", None)
-                    try:
-                        pcm_16k, state = audioop.ratecv(pcm_mono, 2, 1, 48000, self._VAD_SR, state)
-                        self._rcv_state = state
-                    except Exception:
-                        pcm_16k = pcm_mono
-                else:
-                    pcm_16k = pcm_mono
+                try:
+                    # feed decoded PCM into preproc which handles downmix/resample
+                    self._preproc.push(pcm_frame, in_sr=in_sr, in_ch=in_ch)
+                    frames = self._preproc.pop_frames(FRAME_BYTES)
+                except Exception:
+                    # fallback: treat pcm_frame as single frame if anything fails
+                    frames = [pcm_frame]
             except Exception:
                 pcm_16k = pcm_frame
 
@@ -141,8 +199,16 @@ class VADProvider(VADProviderBase):
             # VAD uses configured frame size (16kHz, 20ms)
             if not hasattr(self, "_vad_stash"):
                 self._vad_stash = b""
-            # append resampled pcm_16k to local stash
-            self._vad_stash += pcm_16k
+            # append newly produced frames to local stash
+            try:
+                for f in frames:
+                    self._vad_stash += f
+            except Exception:
+                # fallback: ensure at least original pcm_frame is present
+                try:
+                    self._vad_stash += pcm_frame
+                except Exception:
+                    pass
 
             FRAME_BYTES = self._VAD_FRAME_BYTES
 
@@ -186,9 +252,9 @@ class VADProvider(VADProviderBase):
 
                 # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
                 try:
-                    if len(chunk) <= 2:
+                    if len(frame) <= 2:
                         logger.bind(tag=TAG).info(
-                            f"[AUDIO_TRACE] SKIP_SMALL_CHUNK UTT#{getattr(conn,'utt_seq',0)} chunk_bytes={len(chunk)} (likely DTX)"
+                            f"[AUDIO_TRACE] SKIP_SMALL_CHUNK UTT#{getattr(conn,'utt_seq',0)} chunk_bytes={len(frame)} (likely DTX)"
                         )
                         # treat as non-voice but only advance the consecutive-silence
                         # counter if we previously observed enough voiced frames.
@@ -239,7 +305,7 @@ class VADProvider(VADProviderBase):
                     # compute simple RMS to help debug why VAD may be silent
                     try:
                         import audioop as _audioop
-                        rms_val = _audioop.rms(chunk, 2)
+                        rms_val = _audioop.rms(frame, 2)
                     except Exception:
                         rms_val = 0
 
@@ -269,7 +335,7 @@ class VADProvider(VADProviderBase):
                         self._rms_cnt = 0
 
                     logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val} thr={threshold}"
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(frame)} is_voice={is_voice} rms={rms_val} thr={threshold}"
                     )
                 except Exception:
                     pass
