@@ -16,25 +16,38 @@ TAG = __name__
 async def handleAudioMessage(conn, audio):
     # 当前片段是否有人说话
     # 原実装に沿ってVADで判定（但しVAD未就绪时先按listen状态处理，避免报错）
+    # Ensure DTX tiny packets are dropped immediately (<=3 bytes)
+    try:
+        dtx_thr = int(os.getenv("DTX_THRESHOLD", "3"))
+    except Exception:
+        dtx_thr = 3
+    if audio and len(audio) <= dtx_thr:
+        try:
+            conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] DROP_DTX pkt={len(audio)}")
+        except Exception:
+            pass
+        return
+
+    # Always call VAD first, then ASR
     if getattr(conn, "vad", None) is None:
         have_voice = conn.client_have_voice
     else:
+        # mark ingress seq seen
+        try:
+            conn._ingress_seen.add('INGRESS_CALL')
+        except Exception:
+            pass
         vad_result = conn.vad.is_vad(conn, audio)
-        # Support both old boolean return and new dict return
-        if isinstance(vad_result, dict):
-            # respect dtx flag: tiny packets explicitly treated as non-voice
-            if vad_result.get("dtx", False):
-                have_voice = False
-                # do not append to asr buffer; signal to caller that this is DTX
-                audio = b""
-            else:
-                # unify key: use 'speech' as canonical
+        # record and log VAD result
+        try:
+            # Support both dict return and boolean
+            if isinstance(vad_result, dict):
                 have_voice = bool(vad_result.get("speech", False))
-                # attach decoded pcm if provided
-                if vad_result.get("pcm"):
-                    audio = vad_result.get("pcm")
-        else:
-            have_voice = bool(vad_result)
+            else:
+                have_voice = bool(vad_result)
+            conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_RESULT pkt={len(audio)} have_voice={have_voice}")
+        except Exception:
+            pass
 
     # デバッグ用途: 強制的に有声扱いし、一定フレームで自動停止
     # NOTE: Disabled by default to avoid forced early flush during normal testing.

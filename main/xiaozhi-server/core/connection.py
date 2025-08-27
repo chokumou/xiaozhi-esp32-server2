@@ -119,6 +119,11 @@ class ConnectionHandler:
         self.client_voice_stop = False
         self.client_voice_window = deque(maxlen=5)
         self.last_is_voice = False
+        # VAD runtime counters
+        self.vad_consecutive_silence = 0
+        self.vad_recent_voice_frames = 0
+        # wake guard timestamp (ms)
+        self.wake_until = 0
 
         # asr相关变量
         # 因为实际部署时可能会用到公共的本地ASR，不能把变量暴露给公共ASR
@@ -168,6 +173,8 @@ class ConnectionHandler:
 
         # Debugging/Tracing helpers
         self.utt_seq = 0  # Incremented on listen start
+        # ingress tracing
+        self._ingress_seen = set()
         self.rx_frames_since_listen = 0
         self.rx_bytes_since_listen = 0
         self._stop_cause = None  # 'manual' or 'vad:<reason>'
@@ -233,6 +240,12 @@ class ConnectionHandler:
 
             # 获取差异化配置
             self._initialize_private_config()
+            # ensure ingress fields exist
+            try:
+                if not hasattr(self, '_ingress_seen'):
+                    self._ingress_seen = set()
+            except Exception:
+                pass
             # 异步初始化
             self.executor.submit(self._initialize_components)
 
