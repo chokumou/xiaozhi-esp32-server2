@@ -101,6 +101,8 @@ class ConnectionHandler:
 
         # 依赖的组件
         self.vad = None
+        # public accessor used by receiveAudioHandle etc.
+        self.vad_provider = None
         self.asr = None
         self.tts = None
         self._asr = _asr
@@ -632,6 +634,30 @@ class ConnectionHandler:
             self.tts = modules["tts"]
         if modules.get("vad", None) is not None:
             self.vad = modules["vad"]
+        # Ensure a stable vad_provider reference is available on the connection
+        try:
+            if getattr(self, 'vad', None) is not None:
+                self.vad_provider = self.vad
+            else:
+                # Fallback: try to instantiate a default webrtc provider
+                try:
+                    from core.providers.vad.webrtc import VADProvider as WebrtcVAD
+
+                    try:
+                        vad_conf = self.config.get("VAD", {})
+                    except Exception:
+                        vad_conf = {}
+                    self.vad_provider = WebrtcVAD(vad_conf)
+                except Exception:
+                    self.vad_provider = None
+
+            try:
+                self.logger.bind(tag=TAG).info(f"[BOOT] VAD_IMPL={type(self.vad_provider).__name__ if self.vad_provider is not None else 'None'}")
+            except Exception:
+                pass
+        except Exception:
+            # keep going but leave vad_provider as None
+            self.vad_provider = None
         if modules.get("asr", None) is not None:
             self.asr = modules["asr"]
         if modules.get("llm", None) is not None:
