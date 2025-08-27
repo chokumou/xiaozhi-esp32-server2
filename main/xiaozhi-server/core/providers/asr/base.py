@@ -53,6 +53,33 @@ class ASRProviderBase(ABC):
 
     # 接收音频
     async def receive_audio(self, conn, audio, audio_have_voice):
+        # FAILFAST: detect paths that deliver non-DTX audio without VAD
+        try:
+            if os.getenv("DEBUG_FAILFAST", "1") == "1":
+                if audio and len(audio) > 3 and not audio_have_voice and not getattr(conn, 'client_have_voice', False):
+                    traceback.print_stack(limit=5)
+                    raise RuntimeError("[FAILFAST] non-DTX arrived with have_voice=False → VAD not called on this path")
+        except Exception:
+            # Re-raise so devs can see the failure; do not swallow
+            raise
+        # BYPASS detection: if non-DTX audio keeps arriving but have_voice is False,
+        # that indicates VAD was not called on the path delivering audio.
+        audio_have_voice_flag = bool(audio_have_voice)
+        if audio and len(audio) > 3 and not audio_have_voice_flag and not getattr(conn, 'client_have_voice', False):
+            conn._no_vad_streak = getattr(conn, '_no_vad_streak', 0) + 1
+            if conn._no_vad_streak == 3:
+                logger.bind(tag=TAG).error("[AUDIO_TRACE] BYPASS: non-DTX x3 but have_voice_in=False → VAD not called on this path")
+                try:
+                    hv = None
+                    if getattr(conn, 'vad', None) is not None:
+                        hv = conn.vad.is_vad(conn, audio)
+                        logger.bind(tag=TAG).error(f"[AUDIO_TRACE] BYPASS_CHECK forced VAD → {hv}")
+                    else:
+                        logger.bind(tag=TAG).error("[AUDIO_TRACE] BYPASS_CHECK: conn.vad is None")
+                except Exception as e:
+                    logger.bind(tag=TAG).error(f"[AUDIO_TRACE] BYPASS_CHECK VAD error: {e}")
+        else:
+            conn._no_vad_streak = 0
         if conn.client_listen_mode == "auto" or conn.client_listen_mode == "realtime":
             have_voice = audio_have_voice
         else:

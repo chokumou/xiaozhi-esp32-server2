@@ -3,6 +3,7 @@ import os
 from config.runtime_flags import flags
 import asyncio
 import json
+import traceback
 from core.handle.sendAudioHandle import send_stt_message
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
@@ -29,6 +30,7 @@ async def handleAudioMessage(conn, audio):
         return
 
     # Always call VAD first, then ASR
+    # Force VAD call here as a tripwire so we can detect unused ingress paths.
     if getattr(conn, "vad", None) is None:
         have_voice = conn.client_have_voice
     else:
@@ -37,17 +39,27 @@ async def handleAudioMessage(conn, audio):
             conn._ingress_seen.add('INGRESS_CALL')
         except Exception:
             pass
-        vad_result = conn.vad.is_vad(conn, audio)
-        # record and log VAD result
+        # Tripwire: always call VAD here and log unconditionally
         try:
-            # Support both dict return and boolean
+            # call VAD and capture structured result
+            vad_result = conn.vad.is_vad(conn, audio)
             if isinstance(vad_result, dict):
                 have_voice = bool(vad_result.get("speech", False))
             else:
                 have_voice = bool(vad_result)
+            # explicit tripwire log
             conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_RESULT pkt={len(audio)} have_voice={have_voice}")
-        except Exception:
-            pass
+            # FAILFAST tripwire: if VAD somehow returned None/omitted, crash so we can trace caller
+            if have_voice is None:
+                traceback.print_stack(limit=5)
+                raise RuntimeError("[FAILFAST] VAD not executed")
+        except Exception as e:
+            # If VAD fails, log and continue with conservative default
+            try:
+                conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] VAD_CALL_ERROR: {e}")
+            except Exception:
+                pass
+            have_voice = conn.client_have_voice
 
     # デバッグ用途: 強制的に有声扱いし、一定フレームで自動停止
     # NOTE: Disabled by default to avoid forced early flush during normal testing.
