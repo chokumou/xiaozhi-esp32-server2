@@ -68,6 +68,17 @@ class ASRProviderBase(ABC):
         # BYPASS detection: if non-DTX audio keeps arriving but have_voice is False,
         # that indicates VAD was not called on the path delivering audio.
         audio_have_voice_flag = bool(audio_have_voice)
+        # ASR ingress visibility: only log when we actually have voice
+        try:
+            if audio_have_voice_flag:
+                est_pcm = 0
+                if conn.audio_format == "pcm":
+                    est_pcm = sum(len(x) for x in conn.asr_audio) if getattr(conn, 'asr_audio', None) is not None else 0
+                else:
+                    est_pcm = len(getattr(conn, 'asr_audio', [])) * 1920
+                logger.bind(tag=TAG).info(f"[ASR_IN] hv=True pcm_bytes={est_pcm} sr=16000 ch=1 utt={getattr(conn,'utt_seq',0)}")
+        except Exception:
+            pass
         if audio and len(audio) > 3 and not audio_have_voice_flag and not getattr(conn, 'client_have_voice', False):
             conn._no_vad_streak = getattr(conn, '_no_vad_streak', 0) + 1
             if conn._no_vad_streak == 3:

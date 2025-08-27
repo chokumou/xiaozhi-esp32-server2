@@ -310,6 +310,23 @@ async def handleAudioMessage(conn, audio):
             except Exception:
                 pass
 
+        # If in RMS/NO_VAD mode and this frame is considered silent (hv==False),
+        # convert the packet to a DTX-like marker so ASR.receive_audio will ignore it
+        # and we avoid passing non-DTX silent chunks that previously triggered FAILFAST.
+        try:
+            if use_rms and not hv:
+                try:
+                    pkt_len = len(audio) if isinstance(audio, (bytes, bytearray)) else 0
+                except Exception:
+                    pkt_len = 0
+                try:
+                    conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_RMS_DROP pkt={pkt_len} hv={hv}")
+                except Exception:
+                    pass
+                audio = {"dtx": True}
+        except Exception:
+            pass
+
         # Call ASR with keyword-only argument to avoid positional confusion
         await conn.asr.receive_audio(conn, audio, audio_have_voice=hv)
     except Exception:
