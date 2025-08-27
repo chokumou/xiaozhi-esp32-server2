@@ -127,9 +127,41 @@ class VADProvider(VADProviderBase):
             # append resampled pcm_16k to local stash
             self._vad_stash += pcm_16k
 
-            while len(self._vad_stash) >= self._VAD_FRAME_BYTES:
-                chunk = self._vad_stash[: self._VAD_FRAME_BYTES]
-                self._vad_stash = self._vad_stash[self._VAD_FRAME_BYTES:]
+            FRAME_BYTES = self._VAD_FRAME_BYTES
+
+            while len(self._vad_stash) >= FRAME_BYTES:
+                frame = self._vad_stash[:FRAME_BYTES]
+                self._vad_stash = self._vad_stash[FRAME_BYTES:]
+
+                # type/len check
+                try:
+                    if not isinstance(frame, (bytes, bytearray)) or len(frame) != FRAME_BYTES:
+                        logger.bind(tag=TAG).info(
+                            f"[VAD_DBG] bad_frame UTT#{getattr(conn,'utt_seq',0)} type={type(frame)} len={len(frame)} expect={FRAME_BYTES}"
+                        )
+                        continue
+                except Exception:
+                    pass
+
+                # RMS debug
+                try:
+                    import audioop as _audioop
+                    rms = _audioop.rms(frame, 2)
+                except Exception:
+                    rms = 0
+                try:
+                    logger.bind(tag=TAG).info(f"[VAD_DBG] frame=20ms bytes={len(frame)} rms={rms}")
+                except Exception:
+                    pass
+
+                # wake guard: if within wake period, do not allow EoS
+                try:
+                    now_ms = int(time.time() * 1000)
+                    if getattr(conn, 'wake_until', 0) > now_ms:
+                        # treat as active speech window: skip stop detection
+                        pass
+                except Exception:
+                    pass
 
                 # Ignore very small Opus-derived chunks (likely DTX 1-byte packets)
                 try:

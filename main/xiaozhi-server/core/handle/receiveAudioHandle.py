@@ -55,6 +55,15 @@ async def handleAudioMessage(conn, audio):
     #             )
     #         except Exception:
     #             pass
+    # DTX閾値: 非音声小パケットは完全無視（端末のDTX等）
+    try:
+        dtx_thr = int(os.getenv("DTX_THRESHOLD", "3"))
+    except Exception:
+        dtx_thr = 3
+    if audio and len(audio) <= dtx_thr:
+        # drop tiny/DTX packets: do not advance counters or trigger stop
+        return
+
     # 如果设备刚刚被唤醒，短暂忽略VAD检测
     if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
         have_voice = False
@@ -63,6 +72,26 @@ async def handleAudioMessage(conn, audio):
         if not hasattr(conn, "vad_resume_task") or conn.vad_resume_task.done():
             conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
         return
+
+    # 非DTX片が来たら起床処理：VAD状態リセット、wake_guardを設定
+    now_ms = int(time.time() * 1000)
+    if have_voice:
+        # update last non-DTX receive time
+        try:
+            conn.last_non_dtx_time = now_ms
+        except Exception:
+            conn.last_non_dtx_time = now_ms
+        # reset vad states on wake
+        try:
+            conn.reset_vad_states()
+        except Exception:
+            pass
+        # wake guard: do not allow EoS for this many ms after wake (default 300ms)
+        try:
+            wake_guard = int((conn.config or {}).get("wake_guard_ms", os.getenv("WAKE_GUARD_MS", "300")))
+        except Exception:
+            wake_guard = 300
+        conn.wake_until = now_ms + wake_guard
 
     if have_voice:
         if conn.client_is_speaking:
