@@ -1,4 +1,5 @@
 import time
+import os
 import numpy as np
 import opuslib_next
 import audioop
@@ -21,7 +22,12 @@ class VADProvider(VADProviderBase):
         # webrtcvad 可选导入
         try:
             import webrtcvad  # type: ignore
-            self._vad = webrtcvad.Vad(int(config.get("aggressiveness", 2)))
+            # allow env override for quick testing: VAD_AGGR=1 or 0
+            try:
+                aggr = int(os.getenv("VAD_AGGR", config.get("aggressiveness", 2)))
+            except Exception:
+                aggr = int(config.get("aggressiveness", 2))
+            self._vad = webrtcvad.Vad(aggr)
         except Exception:
             self._vad = None
 
