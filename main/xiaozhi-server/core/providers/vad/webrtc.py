@@ -93,6 +93,12 @@ class VADProvider(VADProviderBase):
                 return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
 
             pcm_frame = self.decoder.decode(opus_packet, 960)
+            # log decoded length for debugging
+            try:
+                decoded_len = len(pcm_frame) if pcm_frame else 0
+                logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_DECODED pcm_bytes={decoded_len}")
+            except Exception:
+                pass
             # keep original decoded PCM for ASR path
             conn.client_audio_buffer.extend(pcm_frame)
 
@@ -143,6 +149,10 @@ class VADProvider(VADProviderBase):
             while len(self._vad_stash) >= FRAME_BYTES:
                 frame = self._vad_stash[:FRAME_BYTES]
                 self._vad_stash = self._vad_stash[FRAME_BYTES:]
+                try:
+                    logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_FRAME bytes={len(frame)}")
+                except Exception:
+                    pass
 
                 # type/len check
                 try:
@@ -195,16 +205,28 @@ class VADProvider(VADProviderBase):
                     pass
 
                 if self._vad is not None:
-                    # 使用webrtcvad（10/20/30ms帧）。512/16000≈32ms，近似可用
+                    # 使用webrtcvad（10/20/30msフレーム）
                     is_voice = False
                     try:
                         import webrtcvad  # type: ignore
-                        # chunk is 16kHz 16-bit mono little-endian
-                        is_voice = self._vad.is_speech(chunk, self._VAD_SR)
+                        # wake-aware RMS fallback
+                        try:
+                            import audioop as _audioop
+                            rms_val = _audioop.rms(frame, 2)
+                        except Exception:
+                            rms_val = 0
+                        now_ms = int(time.time() * 1000)
+                        wake_until = getattr(conn, 'wake_until', 0)
+                        if wake_until > now_ms and rms_val > 150:
+                            is_voice = True
+                        else:
+                            # call actual vad
+                            is_voice = self._vad.is_speech(frame, self._VAD_SR)
                     except Exception:
-                        is_voice = self._is_voice_energy(chunk)
+                        is_voice = self._is_voice_energy(frame)
                 else:
-                    is_voice = self._is_voice_energy(chunk)
+                    # fallback energy-based
+                    is_voice = self._is_voice_energy(frame)
 
                 conn.last_is_voice = is_voice
                 conn.client_voice_window.append(is_voice)
