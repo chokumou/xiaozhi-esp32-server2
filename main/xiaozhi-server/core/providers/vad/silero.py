@@ -52,6 +52,11 @@ class VADProvider(VADProviderBase):
         """Return dict with dtx flag like webrtc.is_vad for compatibility.
         """
         try:
+            # log entry to trace whether silero is invoked
+            try:
+                logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_ENTER pkt_bytes={len(opus_packet)}")
+            except Exception:
+                pass
             # DTX tiny packet check
             if not opus_packet or len(opus_packet) <= 12:
                 return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}

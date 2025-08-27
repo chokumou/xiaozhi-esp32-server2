@@ -83,6 +83,11 @@ class VADProvider(VADProviderBase):
         treat a dict as truthy when 'speech' is True.
         """
         try:
+            # Visibility: log entry to show VAD is invoked for this packet
+            try:
+                logger.bind(tag=TAG).info(f"[AUDIO_TRACE] VAD_ENTER pkt_bytes={len(opus_packet)}")
+            except Exception:
+                pass
             # DTX tiny packet check at the Opus packet boundary
             if not opus_packet or len(opus_packet) <= 12:
                 return {"dtx": True, "speech": False, "silence_advance": True, "pcm": b""}
@@ -215,10 +220,19 @@ class VADProvider(VADProviderBase):
                         rms_val = _audioop.rms(chunk, 2)
                     except Exception:
                         rms_val = 0
-                    # RMS gate: count consecutive frames with energy and force
-                    # a positive when threshold reached (debug only)
+
+                    # dynamic RMS gate: lower threshold within wake guard
                     try:
-                        if rms_val > 400:
+                        now_ms = int(time.time() * 1000)
+                        wake_until = getattr(conn, 'wake_until', 0)
+                        wake_gate = int(os.getenv('VAD_WAKE_RMS_GATE', '150'))
+                        normal_gate = int(os.getenv('VAD_RMS_GATE', '200'))
+                        threshold = wake_gate if wake_until > now_ms else normal_gate
+                    except Exception:
+                        threshold = 200
+
+                    try:
+                        if rms_val > threshold:
                             self._rms_cnt = getattr(self, "_rms_cnt", 0) + 1
                         else:
                             self._rms_cnt = 0
@@ -227,13 +241,13 @@ class VADProvider(VADProviderBase):
 
                     if getattr(self, "_rms_cnt", 0) >= 2:
                         logger.bind(tag=TAG).info(
-                            f"[AUDIO_TRACE] VAD_DBG force speech by RMS UTT#{getattr(conn,'utt_seq',0)} rms={rms_val}"
+                            f"[AUDIO_TRACE] VAD_DBG force speech by RMS UTT#{getattr(conn,'utt_seq',0)} rms={rms_val} thr={threshold}"
                         )
                         is_voice = True
                         self._rms_cnt = 0
 
                     logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val}"
+                        f"[AUDIO_TRACE] VAD_FRAME UTT#{getattr(conn,'utt_seq',0)} frame_idx={self._frame_idx} frame_bytes={len(chunk)} is_voice={is_voice} rms={rms_val} thr={threshold}"
                     )
                 except Exception:
                     pass
