@@ -61,6 +61,47 @@ async def handleAudioMessage(conn, audio):
                 pass
             have_voice = conn.client_have_voice
 
+        # Voice-session tracking: only trigger end-of-speech after
+        # we've observed a voiced run followed by silence for 1s.
+        try:
+            now_ms = int(time.time() * 1000)
+            # entered voice
+            if have_voice:
+                if not getattr(conn, '_in_voice_active', False):
+                    conn._in_voice_active = True
+                # cancel any pending post-voice task
+                try:
+                    if hasattr(conn, '_voice_end_task') and conn._voice_end_task and not conn._voice_end_task.done():
+                        conn._voice_end_task.cancel()
+                except Exception:
+                    pass
+            else:
+                # just exited a voiced run -> schedule 1s guard to flush
+                if getattr(conn, '_in_voice_active', False):
+                    conn._in_voice_active = False
+
+                    async def _voice_end_wait(c):
+                        try:
+                            await asyncio.sleep(1.0)
+                            if not getattr(c, 'client_have_voice', False) and not getattr(c, 'client_is_speaking', False):
+                                try:
+                                    c._stop_cause = 'post_voice_silence_1s'
+                                    c.client_voice_stop = True
+                                    c.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(c,'utt_seq',0)} voice ended -> forced stop after 1s")
+                                except Exception:
+                                    pass
+                        except asyncio.CancelledError:
+                            return
+                        except Exception:
+                            return
+
+                    try:
+                        conn._voice_end_task = asyncio.create_task(_voice_end_wait(conn))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     # デバッグ用途: 強制的に有声扱いし、一定フレームで自動停止
     # NOTE: Disabled by default to avoid forced early flush during normal testing.
     # To enable runtime forced-VAD for debugging, set VAD_FORCE_VOICE=1 and
@@ -147,13 +188,121 @@ async def handleAudioMessage(conn, audio):
             return
 
         vad_api = getattr(conn, 'vad_provider', None) or getattr(conn, 'vad', None)
-        if vad_api is None:
-            # No VAD available, fallback to existing flag
-            hv = conn.client_have_voice
+        # Prefer RMS-based detection when VAD is unavailable or explicitly disabled
+        use_rms = os.getenv("NO_VAD", "0") == "1" or os.getenv("USE_RMS", "0") == "1" or vad_api is None
+        if use_rms:
+            hv = False
             try:
-                conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] ENFORCE_VAD missing vad provider, fallback hv={hv}")
-            except Exception:
-                pass
+                import audioop as _audioop
+                import math
+                # decode opus -> pcm if needed (avoid double-decode if audio is already pcm)
+                pcm = None
+                if getattr(conn, 'audio_format', 'opus') in ('pcm', 'pcm16', 's16'):
+                    pcm = audio
+                else:
+                    if vad_api is not None and hasattr(vad_api, 'decoder'):
+                        try:
+                            pcm = vad_api.decoder.decode(audio, 960)
+                        except Exception:
+                            pcm = None
+                    else:
+                        try:
+                            import opuslib_next
+
+                            dec = opuslib_next.Decoder(16000, 1)
+                            pcm = dec.decode(audio, 960)
+                        except Exception:
+                            pcm = None
+
+                # DTX: if packet small we already returned earlier; extra guard
+                if not pcm or len(pcm) == 0:
+                    hv = False
+                else:
+                    # per-connection rms buffer for 20ms frames
+                    frame_bytes = 2 * 16000 * 20 // 1000  # 640
+                    if not hasattr(conn, '_rms_buf'):
+                        conn._rms_buf = bytearray()
+                    conn._rms_buf.extend(pcm)
+
+                    # calibration: collect initial quiet samples for noise floor
+                    now_ms = int(time.time() * 1000)
+                    calib_window_ms = float(os.getenv('VAD_RMS_CALIB_MS', '800'))
+                    if not hasattr(conn, '_rms_calib_start'):
+                        conn._rms_calib_start = now_ms
+                        conn._rms_calib_samples = []
+
+                    # process available 20ms frames
+                    while len(conn._rms_buf) >= frame_bytes:
+                        chunk = bytes(conn._rms_buf[:frame_bytes])
+                        del conn._rms_buf[:frame_bytes]
+                        try:
+                            rms = _audioop.rms(chunk, 2)
+                        except Exception:
+                            rms = 0
+                        # during calibration window collect rms samples
+                        if (now_ms - conn._rms_calib_start) <= calib_window_ms:
+                            conn._rms_calib_samples.append(rms)
+                            # postpone decision until at least one frame after calibration
+                        # update running accumulator (leaky integrator)
+                        acc = getattr(conn, '_rms_acc', 0.0)
+                        tau = float(os.getenv('VAD_RMS_TAU_MS', '250'))
+                        decay = math.exp(- (20.0 / max(1.0, tau)))
+                        noise_floor = getattr(conn, '_rms_noise_floor', None)
+                        if noise_floor is None and conn._rms_calib_samples:
+                            # compute 20th percentile when calibration window completes
+                            if (now_ms - conn._rms_calib_start) > calib_window_ms:
+                                s = sorted(conn._rms_calib_samples)
+                                idx = max(0, int(len(s) * 0.2) - 1)
+                                conn._rms_noise_floor = s[idx] if s else 0
+                                noise_floor = conn._rms_noise_floor
+                        if noise_floor is None:
+                            noise_floor = int(os.getenv('VAD_RMS_NOISE_FLOOR', '0'))
+                        delta = max(0, rms - (noise_floor or 0))
+                        acc = acc * decay + delta
+                        conn._rms_acc = acc
+
+                        # gate thresholds (ON/OFF) with hysteresis
+                        try:
+                            gate_on = int(os.getenv('VAD_RMS_GATE_ON', os.getenv('VAD_RMS_GATE', '200')))
+                        except Exception:
+                            gate_on = 200
+                        try:
+                            gate_off = os.getenv('VAD_RMS_GATE_OFF', None)
+                            if gate_off is not None:
+                                gate_off = int(gate_off)
+                            else:
+                                # OFF = ON -4dB ~= ON / 10^(4/20)
+                                gate_off = int(gate_on / (10 ** (4.0 / 20.0)))
+                        except Exception:
+                            gate_off = int(gate_on * 0.63)
+
+                        # convert acc comparison to use rms-like units by scaling
+                        # Here we compare acc directly to gate thresholds scaled by frame length
+                        # (acc is in linear amplitude units summed with decay); keep simple mapping
+                        if acc >= gate_on:
+                            hv = True
+                        elif acc <= gate_off:
+                            hv = False
+
+                        # logging
+                        try:
+                            conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_RMS frame_rms={rms} acc={acc:.1f} noise={noise_floor} on={gate_on} off={gate_off} hv={hv}")
+                        except Exception:
+                            pass
+
+                        # update last_non_dtx_time only on actual voiced detection
+                        if hv:
+                            try:
+                                conn.last_non_dtx_time = int(time.time() * 1000)
+                            except Exception:
+                                pass
+
+            except Exception as e:
+                try:
+                    conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] ENFORCE_RMS error: {e}")
+                except Exception:
+                    pass
+                hv = conn.client_have_voice
         else:
             hv = vad_api.is_vad(conn, audio)
             try:

@@ -54,11 +54,14 @@ class ASRProviderBase(ABC):
     # 接收音频
     async def receive_audio(self, conn, audio, *, audio_have_voice: bool):
         # FAILFAST: detect paths that deliver non-DTX audio without VAD
+        # FAILFAST: only active in normal VAD mode. In RMS/NO_VAD modes we bypass.
         try:
-            if os.getenv("DEBUG_FAILFAST", "1") == "1":
-                if audio and len(audio) > 3 and not audio_have_voice and not getattr(conn, 'client_have_voice', False):
-                    traceback.print_stack(limit=5)
-                    raise RuntimeError("[FAILFAST] non-DTX arrived with have_voice=False → VAD not called on this path")
+            use_rms = os.getenv('NO_VAD', '0') == '1' or os.getenv('USE_RMS', '0') == '1'
+            if not use_rms:
+                if os.getenv("DEBUG_FAILFAST", "1") == "1":
+                    if audio and len(audio) > 3 and not audio_have_voice and not getattr(conn, 'client_have_voice', False):
+                        traceback.print_stack(limit=5)
+                        raise RuntimeError("[FAILFAST] non-DTX arrived with have_voice=False → VAD not called on this path")
         except Exception:
             # Re-raise so devs can see the failure; do not swallow
             raise
