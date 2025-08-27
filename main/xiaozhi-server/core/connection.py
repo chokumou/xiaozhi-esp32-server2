@@ -183,6 +183,34 @@ class ConnectionHandler:
         # Additional debugging fields
         self.debug_last_stop_set_by = None
 
+        # --- Ensure vad_provider initialized immediately (fallback to WebRTC) ---
+        try:
+            from core.providers.vad.webrtc import VADProvider as WebrtcVAD
+            try:
+                # prefer module-specific config if present
+                vad_conf = self.config.get("VAD", {}).get("WebRTCVAD", {})
+            except Exception:
+                vad_conf = self.config.get("VAD", {}) or {}
+            try:
+                self.vad_provider = WebrtcVAD(vad_conf)
+            except Exception:
+                # if instantiation fails, leave vad_provider to be set later
+                self.vad_provider = getattr(self, 'vad', None)
+
+            try:
+                import subprocess
+                sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+            except Exception:
+                sha = "unknown"
+            try:
+                self.logger.bind(tag=TAG).info(f"[BOOT] COMMIT={sha} VAD_IMPL={type(self.vad_provider).__name__ if self.vad_provider is not None else 'None'}")
+            except Exception:
+                pass
+        except Exception:
+            # keep moving; _initialize_components will try to set vad later
+            self.vad_provider = getattr(self, 'vad', None)
+        # ---------------------------------------------------------------------
+
     async def handle_connection(self, ws):
         try:
             # 获取并验证headers（大小写不敏感，统一为小写键）
