@@ -396,6 +396,27 @@ async def handleAudioMessage(conn, audio):
                         except Exception:
                             pass
                         # --- endウォッチドッグ ---
+                        # --- 追加: 最終ウォッチドッグ（DTX/tiny packet によるカウント中断を補償） ---
+                        try:
+                            now_ms_force = int(time.time() * 1000)
+                            last_voice = getattr(conn, 'last_voice_ms', None)
+                            force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                            # If we had recent voice in the past and now it's been >= force_thresh, force EoS
+                            if last_voice is not None and not getattr(conn, 'client_voice_stop', False):
+                                if now_ms_force - last_voice >= force_thresh:
+                                    try:
+                                        conn._stop_cause = 'force_watchdog_time'
+                                    except Exception:
+                                        pass
+                                    conn.client_voice_stop = True
+                                    conn.client_have_voice = False
+                                    try:
+                                        conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] voice ended -> forced stop by final_watchdog (ms>{force_thresh}) UTT#{getattr(conn,'utt_seq',0)}")
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
+                        # --- end最終ウォッチドッグ ---
 
             except Exception as e:
                 try:
