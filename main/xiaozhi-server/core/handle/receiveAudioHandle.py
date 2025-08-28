@@ -446,6 +446,25 @@ async def handleAudioMessage(conn, audio):
                     pass
                 # restore original behavior: replace silent non-DTX packet with DTX marker
                 audio = {"dtx": True}
+                # If many DTX/tiny packets are being seen and we had recent voice,
+                # force an EoS here so DTX does not prevent flush.
+                try:
+                    now_force = int(time.time() * 1000)
+                    last_voice = getattr(conn, 'last_voice_ms', None)
+                    force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                    if last_voice is not None and (now_force - last_voice) >= force_thresh and not getattr(conn, 'client_voice_stop', False):
+                        try:
+                            conn._stop_cause = 'force_watchdog_in_drop'
+                        except Exception:
+                            pass
+                        conn.client_voice_stop = True
+                        conn.client_have_voice = False
+                        try:
+                            conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] voice ended -> forced stop in ENFORCE_RMS_DROP (ms>{force_thresh}) UTT#{getattr(conn,'utt_seq',0)}")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
         except Exception:
             pass
 
