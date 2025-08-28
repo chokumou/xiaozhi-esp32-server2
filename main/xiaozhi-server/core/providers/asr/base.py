@@ -165,6 +165,11 @@ class ASRProviderBase(ABC):
                 )
                 # Simply drop the stop signal and continue accumulating
                 conn.client_voice_stop = False
+                # Suppress silence counting until next real voice arrives to avoid immediate re-trigger
+                try:
+                    conn._suppress_silence_count_until_voice = True
+                except Exception:
+                    pass
                 return
 
             # Proceed with normal flush

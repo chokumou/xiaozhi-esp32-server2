@@ -297,6 +297,13 @@ async def handleAudioMessage(conn, audio):
                             except Exception:
                                 pass
 
+                        # If we see real voice, clear any suppression of silence counting
+                        try:
+                            if getattr(conn, '_suppress_silence_count_until_voice', False):
+                                conn._suppress_silence_count_until_voice = False
+                        except Exception:
+                            pass
+
                         # --- 追加: RMSで決定した hv を connection のVADカウンタに反映 ---
                         try:
                             # ensure counters exist
@@ -361,9 +368,20 @@ async def handleAudioMessage(conn, audio):
                             # update last_voice_ms on hv True
                             if hv:
                                 conn.last_voice_ms = now_ms_watch
+                                # reset silence count when we observe voice
                                 conn.silence_count = 0
+                                # also clear any suppression so counting resumes normally
+                                try:
+                                    conn._suppress_silence_count_until_voice = False
+                                except Exception:
+                                    pass
                             else:
-                                conn.silence_count = getattr(conn, 'silence_count', 0) + 1
+                                # if suppression active (flush just happened), skip increasing silence count
+                                if getattr(conn, '_suppress_silence_count_until_voice', False):
+                                    # keep silence_count as is
+                                    pass
+                                else:
+                                    conn.silence_count = getattr(conn, 'silence_count', 0) + 1
 
                             # watchdog: if we thought we were in voice and it's been >=1s since last_voice_ms
                             if getattr(conn, 'client_have_voice', False):
