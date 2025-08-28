@@ -123,6 +123,19 @@ class ASRProviderBase(ABC):
                 logger.bind(tag=TAG).info(
                     f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} recv_chunk size={len(audio)} have_voice={audio_have_voice} client_have_voice={getattr(conn,'client_have_voice',False)} asr_audio_frames={len(conn.asr_audio)} est_pcm={total_len_estimated_now}"
                 )
+                # Auto-flush trigger: if accumulated estimated PCM exceeds threshold,
+                # set client_voice_stop so flush path runs even if VAD/stop timing missed.
+                try:
+                    min_pcm_bytes_auto = int((conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000")))
+                except Exception:
+                    min_pcm_bytes_auto = 12000
+                try:
+                    if total_len_estimated_now >= min_pcm_bytes_auto and not getattr(conn, 'client_voice_stop', False) and not getattr(conn, 'client_is_speaking', False):
+                        conn.client_voice_stop = True
+                        conn._stop_cause = 'auto_buffer_threshold'
+                        logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto})")
+                except Exception:
+                    pass
             except Exception:
                 pass
         # Do not trim audio during pre-voice; let VAD decide when enough voice has arrived
