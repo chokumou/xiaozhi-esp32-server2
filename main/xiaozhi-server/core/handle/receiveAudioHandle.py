@@ -309,7 +309,23 @@ async def handleAudioMessage(conn, audio):
                                 conn.vad_consecutive_silence = 0
                                 conn.vad_recent_voice_frames = min(getattr(conn, 'vad_recent_voice_frames', 0) + 1, 1000)
                                 conn.client_have_voice = True
-                                conn.last_activity_time = int(time.time() * 1000)
+                                # debounce last_voice_ms updates to avoid tiny-spike resets (default 100ms)
+                                try:
+                                    now_ms_local = int(time.time() * 1000)
+                                    last_voice = getattr(conn, 'last_voice_ms', 0)
+                                    debounce_ms = int(os.getenv('VAD_LAST_VOICE_DEBOUNCE_MS', '100'))
+                                    if (now_ms_local - last_voice) > debounce_ms:
+                                        conn.last_voice_ms = now_ms_local
+                                except Exception:
+                                    try:
+                                        conn.last_voice_ms = int(time.time() * 1000)
+                                    except Exception:
+                                        pass
+                                # update activity timestamp
+                                try:
+                                    conn.last_activity_time = int(time.time() * 1000)
+                                except Exception:
+                                    pass
                                 # cancel pending voice-end task if any
                                 try:
                                     if hasattr(conn, '_voice_end_task') and conn._voice_end_task and not conn._voice_end_task.done():
@@ -404,10 +420,17 @@ async def handleAudioMessage(conn, audio):
                 except Exception:
                     pkt_len = 0
                 try:
-                    conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_RMS_DROP pkt={pkt_len} hv={hv}")
+                    # ※ここを見て※: logging before DROP (for debug)
+                    conn.logger.bind(tag=TAG).info(f"※ここを見て※ [AUDIO_TRACE] ENFORCE_RMS_DROP pkt={pkt_len} hv={hv}")
                 except Exception:
                     pass
-                audio = {"dtx": True}
+                # TEMP: disable actual drop to test whether DTX/drop is cause of missing flush
+                # audio = {"dtx": True}
+                try:
+                    # ※ここを見て※: pass-through in temporary debug mode (no dtx replacement)
+                    conn.logger.bind(tag=TAG).info(f"※ここを見て※ [AUDIO_TRACE] ENFORCE_RMS_DROP_DISABLED pkt={pkt_len} hv={hv}")
+                except Exception:
+                    pass
         except Exception:
             pass
 
