@@ -434,8 +434,27 @@ async def handleAudioMessage(conn, audio):
         except Exception:
             pass
 
-        # Call ASR with keyword-only argument to avoid positional confusion
-        await conn.asr.receive_audio(conn, audio, audio_have_voice=hv)
+        # Debug: snapshot before calling ASR
+        try:
+            try:
+                pkt_len_dbg = len(audio) if isinstance(audio, (bytes, bytearray)) else (len(audio.get('pcm')) if isinstance(audio, dict) and audio.get('pcm') else 'dict')
+            except Exception:
+                pkt_len_dbg = 'NA'
+            conn.logger.bind(tag=TAG).info(
+                f"[AUDIO_DEBUG] pre_ASR_call pkt_len={pkt_len_dbg} pkt_type={'dtx' if isinstance(audio, dict) and audio.get('dtx') else 'pcm/opus'} hv={hv} client_have_voice={getattr(conn,'client_have_voice',False)} client_voice_stop={getattr(conn,'client_voice_stop',False)} vad_false_count={getattr(conn,'vad_consecutive_silence',None)} vad_recent_voice={getattr(conn,'vad_recent_voice_frames',None)} last_voice_ms={getattr(conn,'last_voice_ms',None)} rx_frames_since_listen={getattr(conn,'rx_frames_since_listen',None)}"
+            )
+        except Exception:
+            pass
+
+        # Call ASR and catch exceptions for clearer debug
+        try:
+            await conn.asr.receive_audio(conn, audio, audio_have_voice=hv)
+        except Exception as e:
+            try:
+                conn.logger.bind(tag=TAG).error(f"[AUDIO_DEBUG] ASR.receive_audio exception: {e} audio_type={type(audio)} hv={hv}")
+            except Exception:
+                pass
+            raise
     except Exception:
         # Re-raise so FAILFAST/stack traces surface in dev logs
         raise
