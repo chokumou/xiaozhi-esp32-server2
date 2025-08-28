@@ -131,9 +131,27 @@ class ASRProviderBase(ABC):
                     min_pcm_bytes_auto = 12000
                 try:
                     if total_len_estimated_now >= min_pcm_bytes_auto and not getattr(conn, 'client_voice_stop', False) and not getattr(conn, 'client_is_speaking', False):
-                        conn.client_voice_stop = True
-                        conn._stop_cause = 'auto_buffer_threshold'
-                        logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto})")
+                        # only auto-force-stop if currently not actively in voice OR time since last voice >= VAD_FORCE_EOS_MS
+                        now_auto = int(time.time() * 1000)
+                        last_voice_auto = getattr(conn, 'last_voice_ms', None)
+                        try:
+                            force_ms = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                        except Exception:
+                            force_ms = 1000
+                        allow_auto = False
+                        try:
+                            # require either time-based expiry or consecutive-false-frames
+                            if last_voice_auto is not None and (now_auto - last_voice_auto) >= force_ms:
+                                allow_auto = True
+                            elif getattr(conn, 'vad_consecutive_silence', 0) >= int(os.getenv('VAD_SILENCE_FRAMES', '3')):
+                                allow_auto = True
+                        except Exception:
+                            allow_auto = False
+
+                        if allow_auto:
+                            conn.client_voice_stop = True
+                            conn._stop_cause = 'auto_buffer_threshold'
+                            logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto}) cond=allow_auto")
                 except Exception:
                     pass
             except Exception:
