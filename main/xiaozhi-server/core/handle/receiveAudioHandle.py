@@ -420,17 +420,11 @@ async def handleAudioMessage(conn, audio):
                 except Exception:
                     pkt_len = 0
                 try:
-                    # ※ここを見て※: logging before DROP (for debug)
-                    conn.logger.bind(tag=TAG).info(f"※ここを見て※ [AUDIO_TRACE] ENFORCE_RMS_DROP pkt={pkt_len} hv={hv}")
+                    conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] ENFORCE_RMS_DROP pkt={pkt_len} hv={hv}")
                 except Exception:
                     pass
-                # TEMP: disable actual drop to test whether DTX/drop is cause of missing flush
-                # audio = {"dtx": True}
-                try:
-                    # ※ここを見て※: pass-through in temporary debug mode (no dtx replacement)
-                    conn.logger.bind(tag=TAG).info(f"※ここを見て※ [AUDIO_TRACE] ENFORCE_RMS_DROP_DISABLED pkt={pkt_len} hv={hv}")
-                except Exception:
-                    pass
+                # restore original behavior: replace silent non-DTX packet with DTX marker
+                audio = {"dtx": True}
         except Exception:
             pass
 
