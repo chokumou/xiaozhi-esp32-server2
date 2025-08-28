@@ -181,6 +181,13 @@ class ASRProviderBase(ABC):
                 )
             except Exception:
                 pass
+            # 追加デバッグ: flush直前詳細 (※ここを送って※ を送ってください)
+            try:
+                logger.bind(tag=TAG).info(
+                    f"※ここを送って※ [ASR_DBG] flush_ready stop_cause={stop_cause} frames={len(asr_audio_task)} pcm_bytes={len(combined_pcm_data)} session_id={getattr(conn,'session_id',None)} asr_audio_queue_size={getattr(conn,'asr_audio_queue').qsize() if getattr(conn,'asr_audio_queue',None) else 'NA'}"
+                )
+            except Exception:
+                pass
             
             # 预先准备WAV数据
             wav_data = None
@@ -208,6 +215,13 @@ class ASRProviderBase(ABC):
                         else:
                             # 粗い推定：Opus→PCMの目安（各フレームを960サンプル相当として計算）
                             total_len = len(asr_audio_task) * 1920  # 16-bit mono 960 samples
+                        # デバッグ: ASR送信判断値 (※ここを送って※ を送ってください)
+                        try:
+                            logger.bind(tag=TAG).info(
+                                f"※ここを送って※ [ASR_DBG] stop_check total_len={total_len} min_pcm_bytes={min_pcm_bytes} frames={len(asr_audio_task)} client_voice_stop={getattr(conn,'client_voice_stop',False)} asr_audio_frames_stored={len(getattr(conn,'asr_audio',[]))} session_id={getattr(conn,'session_id',None)}"
+                            )
+                        except Exception:
+                            pass
                         if total_len < min_pcm_bytes:
                             logger.bind(tag=TAG).info(
                                 f"Skip ASR: too small audio ({total_len} bytes < {min_pcm_bytes})"
