@@ -297,6 +297,48 @@ async def handleAudioMessage(conn, audio):
                             except Exception:
                                 pass
 
+                        # --- 追加: RMSで決定した hv を connection のVADカウンタに反映 ---
+                        try:
+                            # ensure counters exist
+                            if not hasattr(conn, 'vad_consecutive_silence'):
+                                conn.vad_consecutive_silence = 0
+                            if not hasattr(conn, 'vad_recent_voice_frames'):
+                                conn.vad_recent_voice_frames = 0
+
+                            if hv:
+                                conn.vad_consecutive_silence = 0
+                                conn.vad_recent_voice_frames = min(getattr(conn, 'vad_recent_voice_frames', 0) + 1, 1000)
+                                conn.client_have_voice = True
+                                conn.last_activity_time = int(time.time() * 1000)
+                                # cancel pending voice-end task if any
+                                try:
+                                    if hasattr(conn, '_voice_end_task') and conn._voice_end_task and not conn._voice_end_task.done():
+                                        conn._voice_end_task.cancel()
+                                except Exception:
+                                    pass
+                            else:
+                                # apply decay to rms accumulator even when no new frame is processed
+                                try:
+                                    tau = float(os.getenv('VAD_RMS_TAU_MS', '250'))
+                                    decay = math.exp(- (20.0 / max(1.0, tau)))
+                                    if hasattr(conn, '_rms_acc'):
+                                        conn._rms_acc = getattr(conn, '_rms_acc', 0.0) * decay
+                                except Exception:
+                                    pass
+
+                                conn.vad_consecutive_silence = getattr(conn, 'vad_consecutive_silence', 0) + 1
+                                conn.vad_recent_voice_frames = 0
+
+                                # schedule voice-end wait if we transitioned from voice
+                                try:
+                                    if getattr(conn, 'client_have_voice', False) and (not hasattr(conn, '_voice_end_task') or conn._voice_end_task.done()):
+                                        conn._voice_end_task = asyncio.create_task(_voice_end_wait(conn))
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                        # --- end追加 ---
+
             except Exception as e:
                 try:
                     conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] ENFORCE_RMS error: {e}")

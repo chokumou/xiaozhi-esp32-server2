@@ -3,3 +3,4 @@ $patterns = @("※ここを見せて※","AUDIO_TRACE","UTT#","client_voice_stop
 Get-Content .\server.log -Wait -Tail 0 |
   Select-String -Pattern ($patterns -join "|") |
   Tee-Object server_filtered.log
+
