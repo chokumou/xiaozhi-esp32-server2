@@ -339,6 +339,48 @@ async def handleAudioMessage(conn, audio):
                             pass
                         # --- end追加 ---
 
+                        # --- 追加: 常時ウォッチドッグで最終発話時刻を管理し、1s無音で強制EoS ---
+                        try:
+                            now_ms_watch = int(time.time() * 1000)
+                            # update last_voice_ms on hv True
+                            if hv:
+                                conn.last_voice_ms = now_ms_watch
+                                conn.silence_count = 0
+                            else:
+                                conn.silence_count = getattr(conn, 'silence_count', 0) + 1
+
+                            # watchdog: if we thought we were in voice and it's been >=1s since last_voice_ms
+                            if getattr(conn, 'client_have_voice', False):
+                                last = getattr(conn, 'last_voice_ms', now_ms_watch)
+                                if now_ms_watch - last >= 1000:
+                                    # trigger EoS once
+                                    if not getattr(conn, 'client_voice_stop', False):
+                                        try:
+                                            conn._stop_cause = 'watchdog_silence_1s'
+                                        except Exception:
+                                            pass
+                                        conn.client_voice_stop = True
+                                        conn.client_have_voice = False
+                                        conn.silence_count = 0
+                                        try:
+                                            conn.logger.bind(tag=TAG).info(
+                                                f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} voice ended -> forced stop after 1s (watchdog)"
+                                            )
+                                        except Exception:
+                                            pass
+
+                            # EoS debug line
+                            try:
+                                last_voice_ago = now_ms_watch - getattr(conn, 'last_voice_ms', now_ms_watch)
+                                conn.logger.bind(tag=TAG).info(
+                                    f"[EoS_DBG] hv={hv} utter={getattr(conn,'client_have_voice',False)} acc={getattr(conn,'_rms_acc',0.0):.1f} sil={getattr(conn,'silence_count',0)} last_voice_ago={last_voice_ago:.0f}ms"
+                                )
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                        # --- endウォッチドッグ ---
+
             except Exception as e:
                 try:
                     conn.logger.bind(tag=TAG).error(f"[AUDIO_TRACE] ENFORCE_RMS error: {e}")
