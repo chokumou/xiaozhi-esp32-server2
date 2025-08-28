@@ -22,9 +22,16 @@ async def handleAudioMessage(conn, audio):
         dtx_thr = int(os.getenv("DTX_THRESHOLD", "3"))
     except Exception:
         dtx_thr = 3
+
+    # runtime toggle for verbose audio traces
+    try:
+        audio_trace = os.getenv("AUDIO_TRACE", "1") == "1" or flags.get("AUDIO_TRACE", True)
+    except Exception:
+        audio_trace = True
     if audio and len(audio) <= dtx_thr:
         try:
-            conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] DROP_DTX pkt={len(audio)}")
+            if audio_trace:
+                conn.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] DROP_DTX pkt={len(audio)}")
         except Exception:
             pass
         return
@@ -76,29 +83,39 @@ async def handleAudioMessage(conn, audio):
                 except Exception:
                     pass
             else:
-                # just exited a voiced run -> schedule 1s guard to flush
+                # just exited a voiced run -> previously we scheduled a 1s guard
+                # to flush; this produced premature flushes in practice.
+                # Disable the fixed 1s wait by default. To re-enable a
+                # post-voice wait, set environment variable
+                # VAD_POST_VOICE_WAIT_MS to desired milliseconds (>0).
                 if getattr(conn, '_in_voice_active', False):
                     conn._in_voice_active = False
 
-                    async def _voice_end_wait(c):
-                        try:
-                            await asyncio.sleep(1.0)
-                            if not getattr(c, 'client_have_voice', False) and not getattr(c, 'client_is_speaking', False):
-                                try:
-                                    c._stop_cause = 'post_voice_silence_1s'
-                                    c.client_voice_stop = True
-                                    c.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(c,'utt_seq',0)} voice ended -> forced stop after 1s")
-                                except Exception:
-                                    pass
-                        except asyncio.CancelledError:
-                            return
-                        except Exception:
-                            return
-
                     try:
-                        conn._voice_end_task = asyncio.create_task(_voice_end_wait(conn))
+                        post_wait_ms = int(os.getenv('VAD_POST_VOICE_WAIT_MS', '0'))
                     except Exception:
-                        pass
+                        post_wait_ms = 0
+
+                    if post_wait_ms > 0:
+                        async def _voice_end_wait(c):
+                            try:
+                                await asyncio.sleep(post_wait_ms / 1000.0)
+                                if not getattr(c, 'client_have_voice', False) and not getattr(c, 'client_is_speaking', False):
+                                    try:
+                                        c._stop_cause = f'post_voice_silence_{post_wait_ms}ms'
+                                        c.client_voice_stop = True
+                                        c.logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(c,'utt_seq',0)} voice ended -> forced stop after {post_wait_ms}ms")
+                                    except Exception:
+                                        pass
+                            except asyncio.CancelledError:
+                                return
+                            except Exception:
+                                return
+
+                        try:
+                            conn._voice_end_task = asyncio.create_task(_voice_end_wait(conn))
+                        except Exception:
+                            pass
         except Exception:
             pass
 

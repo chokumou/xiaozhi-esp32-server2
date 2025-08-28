@@ -56,6 +56,10 @@ class ASRProviderBase(ABC):
         # FAILFAST: detect paths that deliver non-DTX audio without VAD
         # FAILFAST: only active in normal VAD mode. In RMS/NO_VAD modes we bypass.
         try:
+            try:
+                audio_trace = os.getenv('AUDIO_TRACE', '1') == '1'
+            except Exception:
+                audio_trace = True
             use_rms = os.getenv('NO_VAD', '0') == '1' or os.getenv('USE_RMS', '0') == '1'
             if not use_rms:
                 if os.getenv("DEBUG_FAILFAST", "1") == "1":
@@ -103,9 +107,10 @@ class ASRProviderBase(ABC):
             # If VAD returned a dict with dtx flag, ignore those chunks entirely
             if isinstance(audio, dict) and audio.get("dtx", False):
                 # do not append or count DTX frames
-                logger.bind(tag=TAG).info(
-                    f"[AUDIO_TRACE] Ignored DTX chunk UTT#{getattr(conn,'utt_seq',0)}"
-                )
+                if audio_trace:
+                    logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] Ignored DTX chunk UTT#{getattr(conn,'utt_seq',0)}"
+                    )
             else:
                 # append raw bytes (caller may pass pcm bytes)
                 # If caller passed a dict with pcm field, extract it
@@ -120,9 +125,10 @@ class ASRProviderBase(ABC):
                     total_len_estimated_now = sum(len(x) for x in conn.asr_audio)
                 else:
                     total_len_estimated_now = len(conn.asr_audio) * 1920
-                logger.bind(tag=TAG).info(
-                    f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} recv_chunk size={len(audio)} have_voice={audio_have_voice} client_have_voice={getattr(conn,'client_have_voice',False)} asr_audio_frames={len(conn.asr_audio)} est_pcm={total_len_estimated_now}"
-                )
+                if audio_trace:
+                    logger.bind(tag=TAG).info(
+                        f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} recv_chunk size={len(audio)} have_voice={audio_have_voice} client_have_voice={getattr(conn,'client_have_voice',False)} asr_audio_frames={len(conn.asr_audio)} est_pcm={total_len_estimated_now}"
+                    )
                 # Auto-flush trigger: if accumulated estimated PCM exceeds threshold,
                 # set client_voice_stop so flush path runs even if VAD/stop timing missed.
                 try:
@@ -143,7 +149,7 @@ class ASRProviderBase(ABC):
                             # require either time-based expiry or consecutive-false-frames
                             if last_voice_auto is not None and (now_auto - last_voice_auto) >= force_ms:
                                 allow_auto = True
-                            elif getattr(conn, 'vad_consecutive_silence', 0) >= int(os.getenv('VAD_SILENCE_FRAMES', '3')):
+                            elif getattr(conn, 'vad_consecutive_silence', 0) >= int(os.getenv('VAD_SILENCE_FRAMES', '5')):
                                 allow_auto = True
                         except Exception:
                             allow_auto = False
@@ -151,7 +157,8 @@ class ASRProviderBase(ABC):
                         if allow_auto:
                             conn.client_voice_stop = True
                             conn._stop_cause = 'auto_buffer_threshold'
-                            logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto}) cond=allow_auto")
+                            if audio_trace:
+                                logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto}) cond=allow_auto")
                 except Exception:
                     pass
             except Exception:
@@ -178,9 +185,10 @@ class ASRProviderBase(ABC):
                 total_len_estimated = len(conn.asr_audio) * 1920
 
             if total_len_estimated < min_pcm_bytes:
-                logger.bind(tag=TAG).info(
-                    f"※ここを見せて※ [AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating ※ここを見せて※"
-                )
+                if audio_trace:
+                    logger.bind(tag=TAG).info(
+                        f"※ここを見せて※ [AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating ※ここを見せて※"
+                    )
                 # Simply drop the stop signal and continue accumulating
                 conn.client_voice_stop = False
                 # Suppress silence counting until next real voice arrives to avoid immediate re-trigger
