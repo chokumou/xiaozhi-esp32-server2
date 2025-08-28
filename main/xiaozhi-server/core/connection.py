@@ -382,6 +382,13 @@ class ConnectionHandler:
                     f"音频帧接收统计: {self._rx_frame_count} 帧, {self._rx_bytes_total} 字节"
                 )
             self.asr_audio_queue.put(message)
+            try:
+                # ※ここを送って※: connection-level audio counters
+                self.logger.bind(tag=TAG).info(
+                    f"※ここを送って※ [AUDIO_STATS] total_rx_frames={self._rx_frame_count} total_rx_bytes={self._rx_bytes_total} rx_frames_since_listen={getattr(self,'rx_frames_since_listen',0)} rx_bytes_since_listen={getattr(self,'rx_bytes_since_listen',0)} asr_audio_queue_size={self.asr_audio_queue.qsize()}"
+                )
+            except Exception:
+                pass
 
     async def handle_restart(self, message):
         """处理服务器重启请求"""
@@ -1160,11 +1167,47 @@ class ConnectionHandler:
             )
 
     def reset_vad_states(self):
+        # Clear audio buffer and voice flags
         self.client_audio_buffer = bytearray()
         self.client_have_voice = False
         self.client_voice_stop = False
-        # Suppress noisy VAD reset logs
-        pass
+        # Clear VAD counters and timers to avoid stale state across turns
+        try:
+            if hasattr(self, 'vad_consecutive_silence'):
+                self.vad_consecutive_silence = 0
+            if hasattr(self, 'vad_recent_voice_frames'):
+                self.vad_recent_voice_frames = 0
+            if hasattr(self, 'silence_count'):
+                self.silence_count = 0
+            # clear last voice timestamp
+            if hasattr(self, 'last_voice_ms'):
+                self.last_voice_ms = None
+            # clear rms accumulator/buffer used by RMS gate
+            if hasattr(self, '_rms_acc'):
+                try:
+                    delattr = setattr
+                    delattr(self, '_rms_acc', 0.0)
+                except Exception:
+                    self._rms_acc = 0.0
+            if hasattr(self, '_rms_buf'):
+                try:
+                    self._rms_buf = bytearray()
+                except Exception:
+                    pass
+            # cancel pending voice end task if any
+            try:
+                if hasattr(self, '_voice_end_task') and self._voice_end_task and not self._voice_end_task.done():
+                    self._voice_end_task.cancel()
+            except Exception:
+                pass
+            # clear in-voice active flag
+            try:
+                if hasattr(self, '_in_voice_active'):
+                    self._in_voice_active = False
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def chat_and_close(self, text):
         """Chat with the user and then close the connection"""
