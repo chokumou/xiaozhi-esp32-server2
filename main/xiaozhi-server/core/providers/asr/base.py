@@ -139,10 +139,12 @@ class ASRProviderBase(ABC):
                 min_pcm_bytes = 12000
 
             if conn.audio_format == "pcm":
+                # actual PCM bytes stored
                 total_len_estimated = sum(len(x) for x in conn.asr_audio)
             else:
-                # conn.asr_audio now holds PCM chunks only (we filter DTX upstream)
-                total_len_estimated = sum(len(x) for x in conn.asr_audio)
+                # conn.asr_audio holds Opus frames; estimate PCM bytes the same way
+                # as the per-chunk trace (frames * 1920)
+                total_len_estimated = len(conn.asr_audio) * 1920
 
             if total_len_estimated < min_pcm_bytes:
                 logger.bind(tag=TAG).info(
