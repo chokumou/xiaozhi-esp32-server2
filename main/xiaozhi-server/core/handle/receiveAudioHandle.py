@@ -386,7 +386,12 @@ async def handleAudioMessage(conn, audio):
                             # watchdog: if we thought we were in voice and it's been >=1s since last_voice_ms
                             if getattr(conn, 'client_have_voice', False):
                                 last = getattr(conn, 'last_voice_ms', now_ms_watch)
-                                if now_ms_watch - last >= 1000:
+                                try:
+                                    force_ms_cfg = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
+                                except Exception:
+                                    force_ms_cfg = 0
+                                # if force_ms_cfg <= 0, time-based force is disabled
+                                if force_ms_cfg > 0 and (now_ms_watch - last) >= force_ms_cfg:
                                     # trigger EoS once
                                     if not getattr(conn, 'client_voice_stop', False):
                                         try:
@@ -418,7 +423,10 @@ async def handleAudioMessage(conn, audio):
                         try:
                             now_ms_force = int(time.time() * 1000)
                             last_voice = getattr(conn, 'last_voice_ms', None)
-                            force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                            try:
+                                force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
+                            except Exception:
+                                force_thresh = 0
                             # If we had recent voice in the past and now it's been >= force_thresh, force EoS
                             if last_voice is not None and not getattr(conn, 'client_voice_stop', False):
                                 if now_ms_force - last_voice >= force_thresh:

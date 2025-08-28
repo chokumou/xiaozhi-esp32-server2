@@ -135,9 +135,9 @@ class ASRProviderBase(ABC):
                         now_auto = int(time.time() * 1000)
                         last_voice_auto = getattr(conn, 'last_voice_ms', None)
                         try:
-                            force_ms = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                            force_ms = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
                         except Exception:
-                            force_ms = 1000
+                            force_ms = 0
                         allow_auto = False
                         try:
                             # require either time-based expiry or consecutive-false-frames
