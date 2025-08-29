@@ -243,7 +243,8 @@ async def handleAudioMessage(conn, audio):
 
                     # calibration: collect initial quiet samples for noise floor
                     now_ms = int(time.time() * 1000)
-                    calib_window_ms = float(os.getenv('VAD_RMS_CALIB_MS', '1200'))
+                    # 固定値: 環境変数によらずコード内で管理
+                    calib_window_ms = 1200.0
                     if not hasattr(conn, '_rms_calib_start'):
                         conn._rms_calib_start = now_ms
                         conn._rms_calib_samples = []
@@ -262,7 +263,8 @@ async def handleAudioMessage(conn, audio):
                             # postpone decision until at least one frame after calibration
                         # update running accumulator (leaky integrator)
                         acc = getattr(conn, '_rms_acc', 0.0)
-                        tau = float(os.getenv('VAD_RMS_TAU_MS', '300'))
+                        # 固定値: コードで一貫して管理
+                        tau = 300.0
                         decay = math.exp(- (20.0 / max(1.0, tau)))
                         noise_floor = getattr(conn, '_rms_noise_floor', None)
                         if noise_floor is None and conn._rms_calib_samples:
@@ -280,9 +282,10 @@ async def handleAudioMessage(conn, audio):
 
                         # gate thresholds (ON/OFF) with hysteresis
                         try:
-                            gate_on = int(os.getenv('VAD_RMS_GATE_ON', os.getenv('VAD_RMS_GATE', '300')))
+                            # 固定閾値: 感度をやや上げる（小声を拾いやすく）
+                            gate_on = 220
                         except Exception:
-                            gate_on = 200
+                            gate_on = 220
                         try:
                             gate_off = os.getenv('VAD_RMS_GATE_OFF', None)
                             if gate_off is not None:
@@ -359,7 +362,8 @@ async def handleAudioMessage(conn, audio):
                             else:
                                 # apply decay to rms accumulator even when no new frame is processed
                                 try:
-                                    tau = float(os.getenv('VAD_RMS_TAU_MS', '250'))
+                                    # 固定値: decay time
+                                    tau = 300.0
                                     decay = math.exp(- (20.0 / max(1.0, tau)))
                                     if hasattr(conn, '_rms_acc'):
                                         conn._rms_acc = getattr(conn, '_rms_acc', 0.0) * decay
