@@ -493,6 +493,13 @@ async def handleAudioMessage(conn, audio):
                     pass
                 # restore original behavior: replace silent non-DTX packet with DTX marker
                 audio = {"dtx": True}
+                # Debug: count DTX replacements to detect excessive DTX suppression
+                try:
+                    conn._dbg_dtx_count = getattr(conn, '_dbg_dtx_count', 0) + 1
+                    if audio_trace:
+                        conn.logger.bind(tag=TAG).info(f"※ここを送って※ [DBG_DTX] cnt={getattr(conn,'_dbg_dtx_count',0)} pkt={pkt_len} utt={getattr(conn,'utt_seq',0)}")
+                except Exception:
+                    pass
                 # If many DTX/tiny packets are being seen and we had recent voice,
                 # force an EoS here so DTX does not prevent flush.
                 try:

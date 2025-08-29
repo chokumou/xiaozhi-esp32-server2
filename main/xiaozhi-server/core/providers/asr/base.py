@@ -271,6 +271,11 @@ class ASRProviderBase(ABC):
                             )
                         except Exception:
                             pass
+                        try:
+                            # ※ここを送って※: snapshot before ASR send
+                            logger.bind(tag=TAG).info(f"※ここを送って※ [ASR_SNAP] total_len={total_len} min_pcm={min_pcm_bytes} frames={len(asr_audio_task)} session={getattr(conn,'session_id',None)} client_voice_stop={getattr(conn,'client_voice_stop',False)}")
+                        except Exception:
+                            pass
                         if total_len < min_pcm_bytes:
                             logger.bind(tag=TAG).info(
                                 f"Skip ASR: too small audio ({total_len} bytes < {min_pcm_bytes})"
@@ -282,6 +287,12 @@ class ASRProviderBase(ABC):
                         )
                         end_time = time.monotonic()
                         logger.bind(tag=TAG).info(f"ASR耗时: {end_time - start_time:.3f}s")
+                        try:
+                            # ※ここを送って※: ASR result debug
+                            raw_text, file_path = result if isinstance(result, tuple) else (result, None)
+                            logger.bind(tag=TAG).info(f"※ここを送って※ [ASR_RES] text='{raw_text}' file={file_path} frames={len(asr_audio_task)} est_pcm={len(asr_audio_task)*1920}")
+                        except Exception:
+                            pass
                         return result
                     finally:
                         loop.close()
