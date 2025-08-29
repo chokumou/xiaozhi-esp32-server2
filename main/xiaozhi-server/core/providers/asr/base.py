@@ -187,6 +187,11 @@ class ASRProviderBase(ABC):
                     logger.bind(tag=TAG).info(
                         f"※ここを見せて※ [AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating ※ここを見せて※"
                     )
+                # Debug: show buffer contents summary
+                try:
+                    logger.bind(tag=TAG).info(f"※ここを送って※ [DBG_BUF] frames={len(conn.asr_audio)} est_pcm={total_len_estimated} session={getattr(conn,'session_id',None)}")
+                except Exception:
+                    pass
                 # Simply drop the stop signal and continue accumulating
                 conn.client_voice_stop = False
                 # Suppress silence counting until next real voice arrives to avoid immediate re-trigger

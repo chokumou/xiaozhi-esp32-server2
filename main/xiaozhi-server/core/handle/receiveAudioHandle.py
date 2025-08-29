@@ -498,10 +498,19 @@ async def handleAudioMessage(conn, audio):
                 try:
                     now_force = int(time.time() * 1000)
                     last_voice = getattr(conn, 'last_voice_ms', None)
-                    force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '1000'))
+                    # final watchdog disabled: force_thresh set to 0 (no time-based force)
+                    force_thresh = 0
                     if last_voice is not None and (now_force - last_voice) >= force_thresh and not getattr(conn, 'client_voice_stop', False):
                         try:
                             conn._stop_cause = 'force_watchdog_in_drop'
+                        except Exception:
+                            pass
+                        # Debug: log detailed stop reason before mutating state
+                        try:
+                            if audio_trace:
+                                conn.logger.bind(tag=TAG).info(
+                                    f"※ここを送って※ [DBG_STOP] pre-set client_voice_stop cause={getattr(conn,'_stop_cause',None)} utt={getattr(conn,'utt_seq',None)} last_voice_ms={getattr(conn,'last_voice_ms',None)} vad_consec={getattr(conn,'vad_consecutive_silence',None)} asr_frames={len(getattr(conn,'asr_audio',[]))}"
+                                )
                         except Exception:
                             pass
                         conn.client_voice_stop = True
