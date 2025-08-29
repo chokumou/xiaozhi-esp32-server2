@@ -243,7 +243,7 @@ async def handleAudioMessage(conn, audio):
 
                     # calibration: collect initial quiet samples for noise floor
                     now_ms = int(time.time() * 1000)
-                    calib_window_ms = float(os.getenv('VAD_RMS_CALIB_MS', '800'))
+                    calib_window_ms = float(os.getenv('VAD_RMS_CALIB_MS', '1200'))
                     if not hasattr(conn, '_rms_calib_start'):
                         conn._rms_calib_start = now_ms
                         conn._rms_calib_samples = []
@@ -262,7 +262,7 @@ async def handleAudioMessage(conn, audio):
                             # postpone decision until at least one frame after calibration
                         # update running accumulator (leaky integrator)
                         acc = getattr(conn, '_rms_acc', 0.0)
-                        tau = float(os.getenv('VAD_RMS_TAU_MS', '250'))
+                        tau = float(os.getenv('VAD_RMS_TAU_MS', '300'))
                         decay = math.exp(- (20.0 / max(1.0, tau)))
                         noise_floor = getattr(conn, '_rms_noise_floor', None)
                         if noise_floor is None and conn._rms_calib_samples:
@@ -280,7 +280,7 @@ async def handleAudioMessage(conn, audio):
 
                         # gate thresholds (ON/OFF) with hysteresis
                         try:
-                            gate_on = int(os.getenv('VAD_RMS_GATE_ON', os.getenv('VAD_RMS_GATE', '200')))
+                            gate_on = int(os.getenv('VAD_RMS_GATE_ON', os.getenv('VAD_RMS_GATE', '300')))
                         except Exception:
                             gate_on = 200
                         try:
