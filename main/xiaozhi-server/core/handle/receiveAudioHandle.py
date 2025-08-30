@@ -147,14 +147,7 @@ async def handleAudioMessage(conn, audio):
         # drop tiny/DTX packets: do not advance counters or trigger stop
         return
 
-    # 如果设备刚刚被唤醒，短暂忽略VAD检测
-    if have_voice and hasattr(conn, "just_woken_up") and conn.just_woken_up:
-        have_voice = False
-        # 设置一个短暂延迟后恢复VAD检测
-        conn.asr_audio.clear()
-        if not hasattr(conn, "vad_resume_task") or conn.vad_resume_task.done():
-            conn.vad_resume_task = asyncio.create_task(resume_vad_detection(conn))
-        return
+    # startup suppression removed: accept incoming audio immediately
 
     # 非DTX片が来たら起床処理：VAD状態リセット、wake_guardを設定
     now_ms = int(time.time() * 1000)
