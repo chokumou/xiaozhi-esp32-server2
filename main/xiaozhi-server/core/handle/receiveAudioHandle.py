@@ -445,13 +445,15 @@ async def handleAudioMessage(conn, audio):
                         try:
                             now_ms_force = int(time.time() * 1000)
                             last_voice = getattr(conn, 'last_voice_ms', None)
+                            # Force threshold is fixed to 0 in code to disable time-based EoS
                             try:
-                                force_thresh = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
+                                force_thresh = 0
                             except Exception:
                                 force_thresh = 0
                             # If we had recent voice in the past and now it's been >= force_thresh, force EoS
                             if last_voice is not None and not getattr(conn, 'client_voice_stop', False):
-                                if now_ms_force - last_voice >= force_thresh:
+                                # only force if force_thresh > 0 and condition met
+                                if force_thresh > 0 and now_ms_force - last_voice >= force_thresh:
                                     try:
                                         conn._stop_cause = 'force_watchdog_time'
                                     except Exception:

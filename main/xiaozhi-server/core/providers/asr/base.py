@@ -148,7 +148,7 @@ class ASRProviderBase(ABC):
                         allow_auto = False
                         try:
                             # Only allow auto-flush when consecutive silence frames reached.
-                            # Remove time-based expiry to avoid premature time-triggered flushes.
+                            # Time-based expiry is disabled (force_ms=0)
                             allow_auto = getattr(conn, 'vad_consecutive_silence', 0) >= int(os.getenv('VAD_SILENCE_FRAMES', '5'))
                         except Exception:
                             allow_auto = False
