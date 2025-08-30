@@ -366,7 +366,14 @@ class ASRProviderBase(ABC):
             if text_len > 0:
                 # 构建包含说话人信息的JSON字符串
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
-                
+
+                # サニタイズ：タグやJSONが混入している場合は除去してから送る
+                try:
+                    from core.utils.text_sanitize import sanitize_for_tts
+                    enhanced_text = sanitize_for_tts(enhanced_text)
+                except Exception:
+                    pass
+
                 # 使用自定义模块进行上报
                 await startToChat(conn, enhanced_text)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
