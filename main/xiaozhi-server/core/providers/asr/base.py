@@ -412,6 +412,30 @@ class ASRProviderBase(ABC):
 
                 await startToChat(conn, enhanced_with_memory)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
+                # --- quick save: immediate single-entry save to manager API (non-blocking) ---
+                try:
+                    try:
+                        from config.manage_api_client import save_mem_local_short
+
+                        def _quick_save():
+                            try:
+                                res = save_mem_local_short(getattr(conn, 'device_id', None), enhanced_text)
+                                if res is None:
+                                    conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: no response for {getattr(conn,'device_id',None)}")
+                                else:
+                                    conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: ok for {getattr(conn,'device_id',None)}")
+                            except Exception as e:
+                                try:
+                                    conn.logger.bind(tag=TAG).error(f"[MEM_SAVE] quick save error: {e}")
+                                except Exception:
+                                    pass
+
+                        threading.Thread(target=_quick_save, daemon=True).start()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
                 # --- save to memory asynchronously (do not block main thread) ---
                 try:
                     if getattr(conn, 'memory', None) is not None:
