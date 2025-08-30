@@ -158,8 +158,16 @@ async def handleAudioMessage(conn, audio):
         except Exception:
             conn.last_non_dtx_time = now_ms
         # reset vad states on wake
+        # NOTE: previously we cleared full VAD state including audio buffers here,
+        # which could drop the very first utterance. Preserve existing audio/VAD
+        # buffer but still reset transient counters if needed in-place.
         try:
-            conn.reset_vad_states()
+            # only reset counters, do NOT clear asr_audio or client audio buffer
+            if hasattr(conn, 'vad_consecutive_silence'):
+                conn.vad_consecutive_silence = 0
+            if hasattr(conn, 'vad_recent_voice_frames'):
+                conn.vad_recent_voice_frames = 0
+            # keep last_voice_ms and asr_audio intact to avoid dropping first utterance
         except Exception:
             pass
         # wake guard: do not allow EoS for this many ms after wake (default 300ms)
