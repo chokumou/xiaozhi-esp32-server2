@@ -9,6 +9,7 @@ from core.utils import p3
 import time
 from datetime import datetime
 from core.utils import textUtils
+from core.utils.text_sanitize import sanitize_for_tts
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
 from core.utils.audio_flow_control import FlowControlConfig
@@ -94,6 +95,10 @@ class TTSProviderBase(ABC):
 
     def to_tts_stream(self, text, opus_handler: Callable[[bytes], None] = None) -> None:
         text = MarkdownCleaner.clean_markdown(text)
+        try:
+            text = sanitize_for_tts(text)
+        except Exception:
+            pass
         max_repeat_time = 5
         if self.delete_audio_file:
             # 需要删除文件的直接转为音频数据
