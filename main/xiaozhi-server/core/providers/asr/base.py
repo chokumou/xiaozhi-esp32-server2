@@ -382,8 +382,51 @@ class ASRProviderBase(ABC):
                     pass
 
                 # 使用自定义模块进行上报
-                await startToChat(conn, enhanced_text)
+                # memory trigger handling: only query memory when user asks (e.g., "覚えてる/教えて/思い出して")
+                try:
+                    from core.utils.memory_utils import check_trigger_and_topic
+                    trig = check_trigger_and_topic(enhanced_text)
+                    if trig and getattr(conn, 'memory', None) is not None:
+                        trigger_word, topic = trig
+                        # If topic known, query memory for that topic
+                        query_text = topic if topic else enhanced_text
+                        try:
+                            future = asyncio.run_coroutine_threadsafe(
+                                conn.memory.query_memory(query_text), conn.loop
+                            )
+                            mem_res = future.result(timeout=1)
+                        except Exception:
+                            mem_res = None
+
+                        # mem_res is the stored short_memory summary (JSON or text)
+                        # If multiple candidates exist, our memory provider currently returns a summary.
+                        # We'll just prepend mem_res when present; further disambiguation UI can be added later.
+                        if mem_res:
+                            enhanced_with_memory = f"[MEMORY]{mem_res}\n{enhanced_text}"
+                        else:
+                            enhanced_with_memory = enhanced_text
+                    else:
+                        enhanced_with_memory = enhanced_text
+                except Exception:
+                    enhanced_with_memory = enhanced_text
+
+                await startToChat(conn, enhanced_with_memory)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
+                # --- save to memory asynchronously (do not block main thread) ---
+                try:
+                    if getattr(conn, 'memory', None) is not None:
+                        def _save():
+                            try:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                loop.run_until_complete(conn.memory.save_memory([enhanced_text]))
+                                loop.close()
+                            except Exception:
+                                pass
+
+                        threading.Thread(target=_save, daemon=True).start()
+                except Exception:
+                    pass
                 
         except Exception as e:
             logger.bind(tag=TAG).error(f"处理语音停止失败: {e}")
