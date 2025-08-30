@@ -1,0 +1,52 @@
+* [33mb090e61[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/backup-before-rollback-b090e61[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mbackup-before-rollback-b090e61[m[33m)[m 正常動作版+ASRバッファ保護と小コメント調整
+* [33m091ddd9[m[33m ([m[1;33mtag: [m[1;33mv0.7.6[m[33m, [m[1;33mtag: [m[1;33mrelease-asr-fix-091ddd9[m[33m, [m[1;33mtag: [m[1;33mrelease-asr-fix-[m[33m)[m 音声: 起動時ASRバッファ保持化（just_woken_up抑止削除）、VADカウンタのみリセット、デバッグ/サニタイズ追加
+* [33m7d6a0c5[m 音声: 起動時 just_woken_up 抑止を恒久削除、ASR/TTS サニタイズデバッグ追加、時間ベースEoS無効化
+* [33m0a7365c[m 音声: ASR/TTSサニタイズとデバッグログ追加、時間ベースEoS無効化
+* [33m99c3dc8[m 音声: ASR結果のサニタイズ追加（タグ/LaTeX除去）と関連ログ追加
+* [33m4c8351b[m 音声: 時間ベースEoS無効化、auto-flush調整、デバッグログ(ここを送って)追加
+* [33m5e77140[m 音声: 時間ベースEoS無効化とデバッグログ追加（ここを送って）
+* [33m01a9a88[m 音声: デバッグログ追加と final_watchdog 無効化（ここを送って 追加）
+* [33m233fb0b[m 音声: デバッグログ追加と final_watchdog 無効化（ここを送って 出力追加）
+* [33m02f0fb6[m 音声: VADパラメータ恒久化（calib_ms=1200,tau_ms=300,gate_on=220,VAD_SILENCE_FRAMES=4）およびログ抑制
+* [33m4f8554b[m 音声: VAD RMS 設定を調整 (calib_ms=1200,tau_ms=300,gate_on=300,VAD_SILENCE_FRAMES=5)
+* [33m6cfdc27[m 音声: VAD調整（1s待機無効化、AUDIO_TRACEトグル、VAD_SILENCE_FRAMES=5 等）
+* [33mc69d921[m 音声: VAD後処理の1s待機を無効化、AUDIO_TRACEのランタイム切替を追加、VAD_SILENCE_FRAMESを緩和
+* [33m1c29933[m 修正: 無音判定優先化／自動フラッシュ条件調整(VAD_FORCE_EOS_MS無効化可)／VAD状態リセット強化
+* [33me33e870[m 修正: VADASRの挙動改善（自動フラッシュ条件強化、EoSウォッチドッグ、状態リセット改善）
+* [33m4716d11[m fix: prevent premature re-trigger after Early-stop by suppressing silence counting until next real voice; improve reset_vad_states
+* [33mf81fcbe[m fix: reset_vad_states clears last_voice_ms, counters, rms buffers and cancels voice tasks to avoid stale VAD state across turns
+* [33mae2e34d[m fix: auto-force flush when estimated PCM >= ASR_MIN_PCM_BYTES to avoid missed EoS
+* [33m3c55467[m fix: unify est_pcm calculation for Opus frames (use frames*1920) to avoid Early-stop mismatch
+* [33madcfc1a[m debug: ASR flush pre-check と flush_ready のデバッグマーカーを追加（ここを送って）
+* [33m1c4411f[m fix: force EoS when DTX/drop persists (VAD_FORCE_EOS_MS) to avoid missed flush
+* [33mff2fd23[m fix: add final watchdog to force EoS when last_voice_ms older than threshold (VAD_FORCE_EOS_MS)
+* [33m167c4d4[m fix: restore ENFORCE_RMS_DROP (DTX marker) to avoid non-DTX silent packets reaching ASR
+* [33m31890d3[m debug: add detailed pre-ASR and ASR exception logs for root-cause detection
+* [33m189ab90[m debug: 一時的に ENFORCE_RMS_DROP を無効化、デバッグマーカーを追加
+* [33m5986e8e[m 修正: RMS判定でclient_have_voice/last_voice_msを確実に更新し、1s無音ウォッチドッグを追加
+* [33mb090f20[m 修正: RMS判定を接続カウンタへ反映し、RMS無音フレームをASRへ流さないガードを追加
+* [33mbdd84db[m fix(vad/asr): log ASR ingress and drop RMS-mode silent frames
+* [33m4ac27c8[m chore: include opuslib_next in requirements
+* [33ma46c9ed[m fix: rms fallback, hysteresis, ensure vad_provider init
+* [33me314836[m fix: enforce VAD->ASR, robust VAD preproc, ensure vad_provider init
+* [33mbfe825c[m fix: force init webrtc VAD provider on connection startup; enforce VAD->ASR path
+* [33ma5ea46f[m fix: ensure vad_provider initialized on ConnectionHandler
+* [33m96f1761[m fix: enforce VAD->ASR path, keyword-only receive_audio, add diagnostics (dev FAILFAST)
+* [33mf22952a[m 修正: VAD呼び順可視化/VAD_FRAMEログ/wake-aware RMSフォールバック
+* [33m76f54ef[m[33m ([m[1;31morigin/feature/dtx-tiny-packets[m[33m)[m 修正: VAD呼び順固定/呼び元トレース/接続初期化追加
+* [33m9bf867d[m 修正: VAD呼び順可視化/VAD_FRAMEログ/wake-aware RMSフォールバック
+* [33m5447ae0[m[33m ([m[1;31morigin/feature/dtx-ignore-tiny-packets[m[33m)[m 修正: VAD_ENTERログ + VAD先行呼び順 + RMSフォールバック追加
+* [33mfe9bf9d[m 修正: VAD/DTX/mono->48k->16k resample/wake_guard/RMS debug
+* [33m0321f0d[m 修正: VAD/DTX/リサンプル/ラッチ/デバッグ追加
+* [33meb29d4d[m 設定: DTX_THRESHOLD 環境変数対応 (デフォルト 12 -> 可変)
+* [33m412a5dd[m 再デプロイ トリガー
+* [33m5b890a7[m 修正: モノラル化->48k->16kリサンプル、silero/state保持、VADキー統一
+* [33mba8e6cc[m 修正: webrtc VAD resample src=48k->16k に修正
+* [33m23c4739[m 再デプロイ: トリガー
+*   [33me43c111[m Merge: feature/dtx-ignore-tiny-packets
+[32m|[m[33m\[m  
+[32m|[m * [33m53c36e1[m[33m ([m[1;32mfeature/dtx-ignore-tiny-packets[m[33m)[m fix(vad): resample VAD input to 16k, frame to 20ms, add RMS debug gate
+[32m|[m * [33m2b7a205[m chore(vad): add per-frame RMS debug to VAD logs
+[32m|[m * [33m81cd252[m fix(vad): resample VAD input to 16k for WebRTC/Silero; ignore tiny DTX packets
+[32m|[m * [33mbd7737a[m 正常動作版: DTX/tiny-packet除外とVAD dtxフラグ対応
+[32m|[m[32m/[m  

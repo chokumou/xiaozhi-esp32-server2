@@ -374,6 +374,13 @@ class ASRProviderBase(ABC):
                 except Exception:
                     pass
 
+                # ASR 正規化: 辞書による置換を行う
+                try:
+                    from core.utils.text_sanitize import normalize_asr_text
+                    enhanced_text = normalize_asr_text(enhanced_text)
+                except Exception:
+                    pass
+
                 # 使用自定义模块进行上报
                 await startToChat(conn, enhanced_text)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
