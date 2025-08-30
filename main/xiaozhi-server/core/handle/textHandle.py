@@ -55,8 +55,17 @@ async def handleTextMessage(conn, message):
                 # Initialize listen window; let VAD set have_voice when true voice arrives
                 conn.client_have_voice = False
                 conn.client_voice_stop = False
+                # Preserve existing ASR buffer to avoid dropping audio that
+                # arrives immediately after the client switches to listening.
+                # Previously this cleared `conn.asr_audio` here which caused
+                # the first utterance to be lost. Only reset transient VAD
+                # counters instead.
                 try:
-                    conn.asr_audio.clear()
+                    # reset VAD counters, do not clear asr_audio
+                    if hasattr(conn, 'vad_consecutive_silence'):
+                        conn.vad_consecutive_silence = 0
+                    if hasattr(conn, 'vad_recent_voice_frames'):
+                        conn.vad_recent_voice_frames = 0
                 except Exception:
                     pass
                 # Clear VAD-related buffers/windows
@@ -64,10 +73,9 @@ async def handleTextMessage(conn, message):
                     conn.client_voice_window.clear()
                 except Exception:
                     pass
-                try:
-                    conn.client_audio_buffer = bytearray()
-                except Exception:
-                    pass
+                # Preserve client_audio_buffer to avoid dropping decoded PCM
+                # that may have been accumulated by the VAD prior to listen
+                # start. Do not reinitialize client_audio_buffer here.
                 # Reset last activity; VAD will update when voice appears
                 conn.last_activity_time = 0.0
             elif msg_json["state"] == "stop":
@@ -95,7 +103,8 @@ async def handleTextMessage(conn, message):
                 await handleAudioMessage(conn, b"")
             elif msg_json["state"] == "detect":
                 conn.client_have_voice = False
-                conn.asr_audio.clear()
+                # Do NOT clear `conn.asr_audio` here. Keep buffered audio so
+                # that if the client already sent audio, it will be processed.
                 if "text" in msg_json:
                     conn.last_activity_time = time.time() * 1000
                     original_text = msg_json["text"]  # 保留原始文本
