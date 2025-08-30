@@ -407,8 +407,9 @@ async def handleAudioMessage(conn, audio):
                             # watchdog: if we thought we were in voice and it's been >=1s since last_voice_ms
                             if getattr(conn, 'client_have_voice', False):
                                 last = getattr(conn, 'last_voice_ms', now_ms_watch)
+                                # Time-based force EoS is disabled in code (always 0)
                                 try:
-                                    force_ms_cfg = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
+                                    force_ms_cfg = 0
                                 except Exception:
                                     force_ms_cfg = 0
                                 # if force_ms_cfg <= 0, time-based force is disabled

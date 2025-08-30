@@ -181,7 +181,8 @@ class VADProvider(VADProviderBase):
                 try:
                     # feed decoded PCM into preproc which handles downmix/resample
                     self._preproc.push(pcm_frame, in_sr=in_sr, in_ch=in_ch)
-                    frames = self._preproc.pop_frames(FRAME_BYTES)
+                    # Use the configured VAD frame size (self._VAD_FRAME_BYTES)
+                    frames = self._preproc.pop_frames(self._VAD_FRAME_BYTES)
                 except Exception:
                     # fallback: treat pcm_frame as single frame if anything fails
                     frames = [pcm_frame]

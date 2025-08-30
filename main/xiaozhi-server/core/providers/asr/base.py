@@ -140,8 +140,9 @@ class ASRProviderBase(ABC):
                         # only auto-force-stop if currently not actively in voice OR time since last voice >= VAD_FORCE_EOS_MS
                         now_auto = int(time.time() * 1000)
                         last_voice_auto = getattr(conn, 'last_voice_ms', None)
+                        # Time-based force EoS is disabled in code (always 0)
                         try:
-                            force_ms = int(os.getenv('VAD_FORCE_EOS_MS', '0'))
+                            force_ms = 0
                         except Exception:
                             force_ms = 0
                         allow_auto = False
