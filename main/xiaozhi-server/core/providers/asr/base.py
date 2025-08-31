@@ -417,15 +417,25 @@ class ASRProviderBase(ABC):
                 try:
                     if os.getenv('QUICK_SAVE', '0') == '1':
                         try:
-                            from config.manage_api_client import save_mem_local_short
+                            from config.manage_api_client import save_mem_local_short_with_token
 
                             def _quick_save():
                                 try:
-                                    res = save_mem_local_short(getattr(conn, 'device_id', None), enhanced_text)
+                                    # try to forward device JWT if available in connection headers
+                                    token = None
+                                    try:
+                                        # common header names
+                                        token = (conn.headers.get('authorization') or conn.headers.get('Authorization') or conn.headers.get('x-auth-token') or conn.headers.get('x-access-token'))
+                                        if isinstance(token, str) and token.startswith('Bearer '):
+                                            token = token.replace('Bearer ', '', 1)
+                                    except Exception:
+                                        token = None
+
+                                    res = save_mem_local_short_with_token(getattr(conn, 'device_id', None), enhanced_text, token=token)
                                     if res is None:
-                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: no response for {getattr(conn,'device_id',None)}")
+                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: no response for {getattr(conn,'device_id',None)} token={'present' if token else 'none'})")
                                     else:
-                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: ok for {getattr(conn,'device_id',None)}")
+                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: ok for {getattr(conn,'device_id',None)} token={'present' if token else 'none'})")
                                 except Exception as e:
                                     try:
                                         conn.logger.bind(tag=TAG).error(f"[MEM_SAVE] quick save error: {e}")

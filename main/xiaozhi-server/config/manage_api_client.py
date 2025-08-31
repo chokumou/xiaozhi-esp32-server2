@@ -159,6 +159,49 @@ def save_mem_local_short(mac_address: str, short_momery: str) -> Optional[Dict]:
         return None
 
 
+def save_mem_local_short_with_token(mac_address: str, short_momery: str, token: Optional[str] = None) -> Optional[Dict]:
+    """Save short memory to manager, optionally using a provided user token for Authorization.
+
+    If token is provided, a short-lived httpx.Client will be used with Authorization: Bearer <token>.
+    Otherwise the global ManageApiClient instance client (using server secret) is used.
+    """
+    try:
+        if token:
+            # use a temporary client with the provided token
+            tmp_client = httpx.Client(
+                base_url=ManageApiClient.config.get("url"),
+                headers={
+                    "User-Agent": f"PythonClient/2.0 (PID:{os.getpid()})",
+                    "Accept": "application/json",
+                    "Authorization": "Bearer " + token,
+                },
+                timeout=ManageApiClient.config.get("timeout", 30),
+            )
+            try:
+                resp = tmp_client.request(
+                    "PUT",
+                    f"/agent/saveMemory/{mac_address}",
+                    json={"summaryMemory": short_momery},
+                )
+                resp.raise_for_status()
+                result = resp.json()
+                if result.get("code") == 0:
+                    return result.get("data")
+                else:
+                    raise Exception(f"API返回错误: {result.get('msg', '未知错误')}")
+            finally:
+                tmp_client.close()
+        else:
+            return ManageApiClient._instance._execute_request(
+                "PUT",
+                f"/agent/saveMemory/" + mac_address,
+                json={"summaryMemory": short_momery},
+            )
+    except Exception as e:
+        print(f"存储短期记忆到服务器失败: {e}")
+        return None
+
+
 def report(
     mac_address: str, session_id: str, chat_type: int, content: str, audio, report_time
 ) -> Optional[Dict]:
