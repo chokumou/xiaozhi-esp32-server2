@@ -1,3 +1,24 @@
+#!/bin/sh
+set -e
+
+# Generate runtime config from environment variables if not provided
+CONFIG_PATH="$(pwd)/data/.config.yaml"
+echo "Generating runtime config to ${CONFIG_PATH}"
+cat > "${CONFIG_PATH}" <<EOF
+manager-api:
+  url: "${MANAGER_API_URL:-}"
+  secret: "${MANAGER_API_SECRET:-}"
+selected_module:
+  Memory: ${MEMORY_MODULE:-nomem}
+QUICK_SAVE: "${QUICK_SAVE:-0}"
+EOF
+
+echo "Runtime config:" 
+sed -n '1,120p' "${CONFIG_PATH}"
+
+# Execute the original command
+exec python app.py
+
 #!/usr/bin/env bash
 set -euo pipefail
 

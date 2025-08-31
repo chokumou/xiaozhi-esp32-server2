@@ -23,8 +23,11 @@ COPY main/xiaozhi-server .
 
 # 必要なディレクトリの作成と基本設定
 RUN mkdir -p tmp data /opt/models/sherpa_sense_voice && \
-    cp -f config_railway.yaml config.yaml && \
-    /bin/sh -lc 'printf "manager-api:\n  url: \"\"\n  secret: \"\"\n" > data/.config.yaml'
+    cp -f config_railway.yaml config.yaml
+
+# Copy entrypoint script and make executable
+COPY main/xiaozhi-server/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ## 以前は起動時にエントリポイントでモデルを取得していたが、
 ## 現在はクラウドASR/LLM/TTSを使用するため不要
@@ -35,4 +38,4 @@ RUN mkdir -p tmp data /opt/models/sherpa_sense_voice && \
 EXPOSE 8000
 
 # アプリケーション起動
-CMD ["python", "app.py"]
+ENTRYPOINT ["/entrypoint.sh"]
