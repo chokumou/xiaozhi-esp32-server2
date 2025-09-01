@@ -34,6 +34,11 @@ try:
     print('import config.config_loader: OK')
 except Exception as e:
     print('import config.config_loader: ERROR ->', repr(e))
+try:
+    import webrtcvad
+    print('import webrtcvad: OK')
+except Exception as e:
+    print('import webrtcvad: ERROR ->', repr(e))
 PY
 echo "--- ENTRYPOINT DEBUG: end ---"
 

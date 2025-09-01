@@ -24,6 +24,7 @@ google-generativeai==0.8.4
 edge_tts==7.0.0
 # webrtcvad removed from trimmed requirements because it requires gcc/build tools to build C extensions
 # If you need webrtcvad in Railway, add build-essential and libwebrtc dependencies to Dockerfile-railway
+webrtcvad==2.0.10
 python-multipart==0.0.6
 PyYAML>=6.0
 aiohttp-cors==0.7.0

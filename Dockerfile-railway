@@ -6,6 +6,13 @@ WORKDIR /opt/xiaozhi-esp32-server
 # システム依存関係のインストール
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    python3-dev \
+    libssl-dev \
+    libffi-dev \
+    pkg-config \
+    rustc \
     libopus0 \
     ffmpeg \
     curl \
