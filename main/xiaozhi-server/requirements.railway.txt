@@ -32,6 +32,8 @@ aiohttp-cors==0.7.0
 jinja2==3.1.6
 # HTML parser used by some utilities
 bs4==0.0.2
+# small markdown helper used by codebase
+markitdown==0.1.1
 # mcp removed to avoid anyio version conflict; server MCP support will be optional at runtime
 # Add any other lightweight libs required by server runtime here
 cnlunar==0.2.0
