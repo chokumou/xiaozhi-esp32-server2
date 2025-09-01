@@ -1,0 +1,15 @@
+# Minimal requirements for Railway deployment (exclude heavy ML/CUDA packages)
+fastapi==0.104.1
+starlette>=0.27.0
+uvicorn[standard]==0.24.0
+pydantic>=2.7.3,<3.0.0
+python-multipart==0.0.6
+requests==2.32.3
+loguru==0.7.3
+aiohttp==3.9.3
+aioconsole==0.8.1
+websockets==14.2
+numpy==1.26.4
+# Add any other lightweight libs required by server runtime here
+
+

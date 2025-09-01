@@ -15,7 +15,8 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Python依存関係のインストール
-COPY main/xiaozhi-server/requirements.txt .
+# For Railway we use a trimmed requirements file to avoid large ML packages
+COPY main/xiaozhi-server/requirements.railway.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションコードのコピー
