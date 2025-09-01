@@ -18,6 +18,8 @@ opuslib_next==1.1.2
 pydub==0.25.1
 # JWT lib
 PyJWT==2.8.0
+# Cryptography used by core.utils.auth
+cryptography>=40.0.0
 # Additional non-ML runtime dependencies discovered in codebase
 openai==1.61.0
 google-generativeai==0.8.4
