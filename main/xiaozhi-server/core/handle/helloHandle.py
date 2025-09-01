@@ -29,4 +29,21 @@ async def handleHelloMessage(conn, msg_json):
             # 发送mcp消息，获取tools列表
             asyncio.create_task(send_mcp_tools_list_request(conn))
 
+    # If client sent token in hello message, store into conn.headers for downstream use
+    try:
+        token = msg_json.get('token')
+        if token:
+            # normalize: allow both 'Bearer xxx' or raw token
+            if token.startswith('Bearer '):
+                token_val = token
+            else:
+                token_val = 'Bearer ' + token
+            # ensure headers dict exists
+            try:
+                conn.headers['authorization'] = token_val
+            except Exception:
+                conn.headers = {'authorization': token_val}
+    except Exception:
+        pass
+
     await conn.websocket.send(json.dumps(conn.welcome_msg))

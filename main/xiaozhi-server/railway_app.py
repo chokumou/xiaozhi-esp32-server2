@@ -6,6 +6,10 @@ import os
 
 app = FastAPI()
 
+# include provisioning router
+from core.api import provisioning_router
+app.include_router(provisioning_router, prefix="")
+
 @app.get("/")
 async def root():
     return {"Hello": "World"}
