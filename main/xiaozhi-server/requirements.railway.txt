@@ -14,6 +14,8 @@ numpy==1.26.4
 httpx==0.27.2
 # Opus library used by util.py
 opuslib_next==1.1.2
+# Audio utility
+pydub==0.25.1
 # Add any other lightweight libs required by server runtime here
 
 

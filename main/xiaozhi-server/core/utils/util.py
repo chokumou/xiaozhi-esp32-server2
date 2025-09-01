@@ -8,8 +8,8 @@ from typing import Callable, Any
 from core.utils import p3
 import numpy as np
 import requests
-import opuslib_next
-from pydub import AudioSegment
+# Delayed imports for heavy optional dependencies to avoid import-time failures
+# opuslib_next and pydub are imported inside functions that need them.
 import copy
 
 TAG = __name__
