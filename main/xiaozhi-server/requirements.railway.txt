@@ -28,7 +28,7 @@ pydub==0.25.1
 webrtcvad==2.0.10
 PyYAML>=6.0
 aiohttp-cors==0.7.0
-mcp==1.8.1
+# mcp removed to avoid anyio version conflict; server MCP support will be optional at runtime
 # Add any other lightweight libs required by server runtime here
 
 
