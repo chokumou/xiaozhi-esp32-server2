@@ -30,6 +30,8 @@ webrtcvad==2.0.10
 python-multipart==0.0.6
 PyYAML>=6.0
 aiohttp-cors==0.7.0
+# MCP client lib used by server_mcp
+mcp==1.8.1
 # Add any other lightweight libs required by server runtime here
 
 
