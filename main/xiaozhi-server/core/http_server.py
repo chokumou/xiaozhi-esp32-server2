@@ -8,6 +8,7 @@ from core.handle.receiveAudioHandle import handleAudioMessage
 from core.utils.modules_initialize import initialize_modules
 from config.runtime_flags import flags
 import os
+import time
 
 TAG = __name__
 
@@ -236,6 +237,41 @@ class SimpleHttpServer:
                     return web.json_response({"ok": False, "error": str(e)}, status=500)
 
             app.add_routes([web.get("/debug/feed_sine", feed_sine)])
+
+            # Provisioning endpoint for issuing device JWTs (simple admin-key protected)
+            async def provision_handler(request: web.Request):
+                try:
+                    data = await request.json()
+                    device_id = data.get("device_id")
+                    if not device_id:
+                        return web.json_response({"error": "missing device_id"}, status=400)
+
+                    admin_key = request.headers.get("x-admin-key") or os.getenv("PROVISION_ADMIN_KEY")
+                    if not admin_key:
+                        return web.json_response({"error": "Provision admin key missing"}, status=401)
+
+                    secret = os.getenv("JWT_SECRET_KEY")
+                    if not secret:
+                        return web.json_response({"error": "Server not configured for JWT issuance"}, status=500)
+
+                    try:
+                        import jwt as _jwt
+                    except Exception:
+                        return web.json_response({"error": "jwt library not available on server"}, status=500)
+
+                    now = int(time.time())
+                    payload = {
+                        "sub": device_id,
+                        "iat": now,
+                        "exp": now + 60 * 60 * 24,
+                        "iss": "nekota-provision",
+                    }
+                    token = _jwt.encode(payload, secret, algorithm="HS256")
+                    return web.json_response({"jwt": token})
+                except Exception as e:
+                    return web.json_response({"error": str(e)}, status=500)
+
+            app.add_routes([web.post("/provision", provision_handler)])
 
             # WAVファイルを投入してASRパイプラインを検証（multipart/form-data: file=@audio.wav）
             async def feed_wav(request: web.Request):
