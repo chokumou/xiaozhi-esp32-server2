@@ -16,6 +16,8 @@ httpx==0.27.2
 opuslib_next==1.1.2
 # Audio utility
 pydub==0.25.1
+# JWT lib
+PyJWT==2.8.0
 # Add any other lightweight libs required by server runtime here
 
 
