@@ -17,6 +17,26 @@ echo "Runtime config:"
 sed -n '1,120p' "${CONFIG_PATH}"
 
 # Execute the original command
+echo "--- ENTRYPOINT DEBUG: start ---"
+echo "PWD: $(pwd)"
+echo "Files:" && ls -la || true
+echo "PYTHONPATH before export: $PYTHONPATH"
+export PYTHONPATH="$(pwd):$PYTHONPATH"
+echo "PYTHONPATH after export: $PYTHONPATH"
+echo "Python sys.path and import test:" 
+python - <<'PY'
+import sys, os
+print('cwd:', os.getcwd())
+print('sys.path:')
+print('\n'.join(sys.path))
+try:
+    import config.config_loader as _cl
+    print('import config.config_loader: OK')
+except Exception as e:
+    print('import config.config_loader: ERROR ->', repr(e))
+PY
+echo "--- ENTRYPOINT DEBUG: end ---"
+
 exec python app.py
 
 #!/usr/bin/env bash
