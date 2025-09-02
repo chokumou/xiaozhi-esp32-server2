@@ -442,7 +442,28 @@ class ASRProviderBase(ABC):
                                     except Exception:
                                         pass
 
-                            threading.Thread(target=_quick_save, daemon=True).start()
+                            def _quick_save_with_fallback():
+                                try:
+                                    _quick_save()
+                                except Exception as e:
+                                    try:
+                                        conn.logger.bind(tag=TAG).warning(f"[MEM_SAVE] quick save failed, falling back to local file: {e}")
+                                        # fallback: use internal save to file
+                                        if getattr(conn, 'memory', None) is not None:
+                                            def _save_local():
+                                                try:
+                                                    loop = asyncio.new_event_loop()
+                                                    asyncio.set_event_loop(loop)
+                                                    loop.run_until_complete(conn.memory.save_memory([enhanced_text]))
+                                                    loop.close()
+                                                except Exception:
+                                                    pass
+
+                                            threading.Thread(target=_save_local, daemon=True).start()
+                                    except Exception:
+                                        pass
+
+                            threading.Thread(target=_quick_save_with_fallback, daemon=True).start()
                         except Exception:
                             pass
                 except Exception:

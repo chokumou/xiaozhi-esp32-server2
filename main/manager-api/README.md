@@ -14,5 +14,6 @@ Redis 5.0+
 Vue 3.x
 
 # 接口文档
+\n+Note: A Dockerfile using Eclipse Temurin JDK21 has been added for Railway builds.
 启动后打开：http://localhost:8002/xiaozhi/doc.html
 
