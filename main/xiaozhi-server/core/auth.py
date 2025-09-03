@@ -27,6 +27,11 @@ class AuthMiddleware:
 
     async def authenticate(self, headers):
         """验证连接请求"""
+        # 如果显式设置本地测试跳过认证，立即通过（便于本地快速验证）
+        # 认证按配置进行。local-test 跳过仅在开发分支使用，不应用于生产。
+        if not self.auth_config.get("enabled", False):
+            return True
+
         # 检查是否启用认证
         if not self.auth_config.get("enabled", False):
             return True

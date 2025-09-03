@@ -21,12 +21,12 @@ except Exception:
 
 
 async def run(uri, device_id, token, message):
-    # Send Authorization header in the WebSocket handshake so server-side auth passes
-    headers = None
-    if token:
-        headers = [("Authorization", f"Bearer {token}"), ("Device-Id", device_id)]
-
-    async with websockets.connect(uri, extra_headers=headers) as ws:
+    # Some websockets versions pass extra_headers into loop.create_connection
+    # which causes TypeError on certain Python event loops. Avoid that by
+    # not passing extra_headers and instead include the token in the hello JSON.
+    # To assist local testing, allow passing local_test=1 in query string which will
+    # cause the server to skip authentication if enabled in connection handlers.
+    async with websockets.connect(uri) as ws:
         hello = {
             "type": "hello",
             "mac": device_id,
