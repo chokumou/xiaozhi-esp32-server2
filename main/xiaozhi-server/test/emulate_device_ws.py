@@ -21,7 +21,12 @@ except Exception:
 
 
 async def run(uri, device_id, token, message):
-    async with websockets.connect(uri) as ws:
+    # Send Authorization header in the WebSocket handshake so server-side auth passes
+    headers = None
+    if token:
+        headers = [("Authorization", f"Bearer {token}"), ("Device-Id", device_id)]
+
+    async with websockets.connect(uri, extra_headers=headers) as ws:
         hello = {
             "type": "hello",
             "mac": device_id,
