@@ -26,12 +26,34 @@ public class AgentMemoryController {
     public Result<Void> saveMemory(@PathVariable("deviceId") String deviceId, @RequestBody Map<String, Object> body) {
         String content = (String) body.getOrDefault("content", "");
         if (content == null) content = "";
+        // Try Redis first
         String key = "agent:memory:" + deviceId;
         try {
             redisUtils.set(key, content, RedisUtils.HOUR_ONE_EXPIRE);
         } catch (Exception e) {
-            return new Result<Void>().error("500", "redis error");
+            // ignore redis errors and fallback to supabase
         }
+
+        // Also persist to Supabase via REST if configured
+        String supabaseUrl = System.getenv("SUPABASE_URL");
+        String supabaseKey = System.getenv("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl != null && supabaseKey != null) {
+            try {
+                String target = supabaseUrl + "/rest/v1/agent_memory";
+                String json = String.format("{\"device_id\":\"%s\",\"content\":\"%s\"}", deviceId, content.replace("\"","\\\""));
+                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(target))
+                        .header("apikey", supabaseKey)
+                        .header("Authorization", "Bearer " + supabaseKey)
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(json))
+                        .build();
+                java.net.http.HttpClient.newHttpClient().send(req, java.net.http.HttpResponse.BodyHandlers.discarding());
+            } catch (Exception ex) {
+                // log but don't fail
+            }
+        }
+
         return new Result<Void>().ok();
     }
 
@@ -41,10 +63,44 @@ public class AgentMemoryController {
         String key = "agent:memory:" + deviceId;
         try {
             Object v = redisUtils.get(key);
-            return new Result<String>().ok(v == null ? "" : String.valueOf(v));
+            if (v != null) return new Result<String>().ok(String.valueOf(v));
         } catch (Exception e) {
-            return new Result<String>().error("500", "redis error");
+            // ignore and fallback to supabase
         }
+
+        // fallback to supabase REST
+        String supabaseUrl = System.getenv("SUPABASE_URL");
+        String supabaseKey = System.getenv("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl != null && supabaseKey != null) {
+            try {
+                String target = supabaseUrl + "/rest/v1/agent_memory?device_id=eq." + java.net.URLEncoder.encode(deviceId, java.nio.charset.StandardCharsets.UTF_8);
+                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(target))
+                        .header("apikey", supabaseKey)
+                        .header("Authorization", "Bearer " + supabaseKey)
+                        .GET()
+                        .build();
+                java.net.http.HttpResponse<String> res = java.net.http.HttpClient.newHttpClient().send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (res.statusCode() == 200) {
+                    String body = res.body();
+                    // naive parse: return first object's content field if exists
+                    int idx = body.indexOf("\"content\":");
+                    if (idx != -1) {
+                        int start = body.indexOf('"', idx + 10) + 1;
+                        int end = body.indexOf('"', start);
+                        if (start>0 && end>start) {
+                            String content = body.substring(start, end);
+                            return new Result<String>().ok(content);
+                        }
+                    }
+                    return new Result<String>().ok(body);
+                }
+            } catch (Exception ex) {
+                // ignore
+            }
+        }
+
+        return new Result<String>().ok("");
     }
 }
 
