@@ -20,10 +20,14 @@ WORKDIR /app
 # Copy built jar (assumes Spring Boot fat jar produced in target/)
 COPY --from=build /app/target/*.jar /app/app.jar
 
+# Copy optional environment file if present in the repo (do NOT commit secrets to public repo)
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh || true
+
 EXPOSE 8002
 
 ENV JAVA_OPTS=""
 
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 
