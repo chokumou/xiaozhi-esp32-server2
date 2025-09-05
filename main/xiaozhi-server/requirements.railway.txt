@@ -17,14 +17,9 @@ opuslib_next==1.1.2
 # Audio utility
 pydub==0.25.1
 # JWT lib
-# Keep essential runtime deps only; remove optional/unused heavy libs
 PyJWT==2.8.0
 # Cryptography used by core.utils.auth
 cryptography>=40.0.0
-# Essential runtime libs
-httpx==0.27.2
-opuslib_next==1.1.2
-pydub==0.25.1
 webrtcvad==2.0.10
 PyYAML>=6.0
 aiohttp-cors==0.7.0
@@ -37,5 +32,7 @@ markitdown==0.1.1
 # mcp removed to avoid anyio version conflict; server MCP support will be optional at runtime
 # Add any other lightweight libs required by server runtime here
 cnlunar==0.2.0
+# OpenAI API client (required for ASR and LLM)
+openai>=1.0.0
 
 
