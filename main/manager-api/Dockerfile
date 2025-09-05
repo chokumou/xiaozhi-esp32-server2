@@ -10,7 +10,7 @@ COPY . /app
 # Debug JDK version
 RUN java -version || true
 
-RUN mvn -B -DskipTests clean package
+RUN mvn -B -DskipTests -Dmaven.test.skip=true clean package
 
 # Runtime image (JRE 21)
 FROM eclipse-temurin:21-jre

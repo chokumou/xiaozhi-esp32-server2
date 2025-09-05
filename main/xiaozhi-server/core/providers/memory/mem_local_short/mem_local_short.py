@@ -199,4 +199,35 @@ class MemoryProvider(MemoryProviderBase):
         return self.short_memory
 
     async def query_memory(self, query: str) -> str:
-        return self.short_memory
+        """Query memory from nekota-server memories table"""
+        try:
+            from config.manage_api_client import ManageApiClient
+            
+            # nekota-server memories search API を呼び出し
+            if ManageApiClient._instance:
+                result = ManageApiClient._instance._execute_request(
+                    "GET",
+                    f"/api/memory/search",
+                    params={
+                        "device_id": self.role_id,
+                        "keyword": query,
+                    }
+                )
+                
+                if result and isinstance(result, list) and len(result) > 0:
+                    # 検索結果を文字列にまとめて返す
+                    memory_texts = []
+                    for memory in result:
+                        if isinstance(memory, dict) and "text" in memory:
+                            memory_texts.append(memory["text"])
+                    
+                    if memory_texts:
+                        return "\n".join(memory_texts)
+            
+            # フォールバック: ローカルメモリーを返す
+            return self.short_memory if self.short_memory else ""
+            
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"Memory query failed: {e}")
+            # エラー時はローカルメモリーを返す
+            return self.short_memory if self.short_memory else ""

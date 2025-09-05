@@ -41,3 +41,4 @@ def check_trigger_and_topic(text: str) -> Optional[tuple]:
 initialize()
 
 
+
