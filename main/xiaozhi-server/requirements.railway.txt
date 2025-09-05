@@ -34,5 +34,7 @@ markitdown==0.1.1
 cnlunar==0.2.0
 # OpenAI API client (required for ASR and LLM)
 openai>=1.0.0
+# Edge TTS (required for text-to-speech)
+edge-tts>=6.1.0
 
 

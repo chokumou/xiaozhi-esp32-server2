@@ -148,6 +148,11 @@ def get_agent_models(
 def save_mem_local_short(mac_address: str, short_momery: str) -> Optional[Dict]:
     """Save memory to nekota-server memories table"""
     try:
+        # ManageApiClient が初期化されているかチェック
+        if ManageApiClient._instance is None:
+            print("ManageApiClient not initialized, skipping memory save")
+            return None
+            
         # nekota-server memories API に保存
         return ManageApiClient._instance._execute_request(
             "POST",
@@ -199,6 +204,11 @@ def save_mem_local_short_with_token(mac_address: str, short_momery: str, token: 
             finally:
                 tmp_client.close()
         else:
+            # ManageApiClient が初期化されているかチェック
+            if ManageApiClient._instance is None:
+                print("ManageApiClient not initialized, skipping memory save")
+                return None
+                
             # nekota-server memories API に保存
             return ManageApiClient._instance._execute_request(
                 "POST",
