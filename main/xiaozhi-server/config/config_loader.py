@@ -27,6 +27,10 @@ def load_config():
     default_config_path = get_project_dir() + "config.yaml"
     custom_config_path = get_project_dir() + "data/.config.yaml"
 
+    print(f"※ここだよ！ get_project_dir(): {get_project_dir()}")
+    print(f"※ここだよ！ default_config_path: {default_config_path}")
+    print(f"※ここだよ！ custom_config_path: {custom_config_path}")
+
     # 加载默认配置
     default_config = read_config(default_config_path)
     # Railway等ではcustomが空でも起動できるようにする
@@ -37,6 +41,14 @@ def load_config():
         print(f"※ここだよ！ custom_config内容: {custom_config}")
     else:
         print(f"※ここだよ！ custom_config_pathが存在しません: {custom_config_path}")
+        # Railway環境での代替パスもチェック
+        alt_path = "/opt/xiaozhi-esp32-server/data/.config.yaml"
+        if os.path.exists(alt_path):
+            custom_config = read_config(alt_path) or {}
+            print(f"※ここだよ！ 代替パスで設定ファイル発見: {alt_path}")
+            print(f"※ここだよ！ 代替パス設定内容: {custom_config}")
+        else:
+            print(f"※ここだよ！ 代替パスも存在しません: {alt_path}")
 
     manager_api_config = custom_config.get("manager-api", {})
     url = manager_api_config.get("url", "")

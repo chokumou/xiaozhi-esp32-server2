@@ -18,44 +18,60 @@ logger = setup_logging()
 
 def ensure_runtime_config():
     """Railway環境で設定ファイルが無い場合、環境変数から生成"""
-    config_path = "/opt/xiaozhi-esp32-server/data/.config.yaml"
+    import os
     
-    # ディレクトリ作成
-    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    # 現在の作業ディレクトリを確認
+    current_dir = os.getcwd()
+    logger.bind(tag=TAG).info(f"※ここだよ！ 現在の作業ディレクトリ: {current_dir}")
     
-    # 設定ファイルが存在しない、かつ環境変数が設定されている場合のみ生成
-    if not os.path.exists(config_path):
-        manager_api_url = os.getenv("MANAGER_API_URL", "")
-        manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
-        memory_module = os.getenv("MEMORY_MODULE", "nomem")
-        quick_save = os.getenv("QUICK_SAVE", "0")
+    # 複数の候補パスを試す
+    candidate_paths = [
+        "/opt/xiaozhi-esp32-server/data/.config.yaml",
+        f"{current_dir}/data/.config.yaml",
+        f"{os.path.dirname(current_dir)}/data/.config.yaml"
+    ]
+    
+    for config_path in candidate_paths:
+        logger.bind(tag=TAG).info(f"※ここだよ！ 候補パス確認: {config_path}")
         
-        logger.bind(tag=TAG).info(f"※ここだよ！ 環境変数から設定ファイル生成: {config_path}")
-        logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_URL: '{manager_api_url}'")
-        logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_SECRET: '{manager_api_secret[:10]}...' (length={len(manager_api_secret)})")
-        logger.bind(tag=TAG).info(f"※ここだよ！ MEMORY_MODULE: '{memory_module}'")
-        logger.bind(tag=TAG).info(f"※ここだよ！ QUICK_SAVE: '{quick_save}'")
+        # ディレクトリ作成
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
         
-        if manager_api_url and manager_api_secret:
-            config_data = {
-                "manager-api": {
-                    "url": manager_api_url,
-                    "secret": manager_api_secret
-                },
-                "selected_module": {
-                    "Memory": memory_module
-                },
-                "QUICK_SAVE": quick_save
-            }
+        # 設定ファイルが存在しない、かつ環境変数が設定されている場合のみ生成
+        if not os.path.exists(config_path):
+            manager_api_url = os.getenv("MANAGER_API_URL", "")
+            manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
+            memory_module = os.getenv("MEMORY_MODULE", "nomem")
+            quick_save = os.getenv("QUICK_SAVE", "0")
             
-            with open(config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+            logger.bind(tag=TAG).info(f"※ここだよ！ 環境変数から設定ファイル生成: {config_path}")
+            logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_URL: '{manager_api_url}'")
+            logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_SECRET: '{manager_api_secret[:10]}...' (length={len(manager_api_secret)})")
+            logger.bind(tag=TAG).info(f"※ここだよ！ MEMORY_MODULE: '{memory_module}'")
+            logger.bind(tag=TAG).info(f"※ここだよ！ QUICK_SAVE: '{quick_save}'")
             
-            logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
+            if manager_api_url and manager_api_secret:
+                config_data = {
+                    "manager-api": {
+                        "url": manager_api_url,
+                        "secret": manager_api_secret
+                    },
+                    "selected_module": {
+                        "Memory": memory_module
+                    },
+                    "QUICK_SAVE": quick_save
+                }
+                
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+                
+                logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
+                return  # 成功したら終了
+            else:
+                logger.bind(tag=TAG).warning("※ここだよ！ 環境変数不足のため設定ファイル生成をスキップ")
         else:
-            logger.bind(tag=TAG).warning("※ここだよ！ 環境変数不足のため設定ファイル生成をスキップ")
-    else:
-        logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル既存: {config_path}")
+            logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル既存: {config_path}")
+            return  # 既存ファイルがあれば終了
 
 
 async def wait_for_exit() -> None:
