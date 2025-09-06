@@ -46,6 +46,19 @@ async def monitor_stdin():
 async def main():
     check_ffmpeg_installed()
     config = load_config()
+    
+    # ManageApiClient初期化
+    try:
+        from config.manage_api_client import ManageApiClient
+        if config.get("manager-api"):
+            api_client = ManageApiClient(config)
+            logger.bind(tag=TAG).info("※ここだよ！ ManageApiClient初期化成功")
+        else:
+            logger.bind(tag=TAG).warning("※ここだよ！ manager-api設定が見つかりません")
+    except Exception as e:
+        logger.bind(tag=TAG).error(f"※ここだよ！ ManageApiClient初期化失敗: {e}")
+        import traceback
+        logger.bind(tag=TAG).error(f"※ここだよ！ ManageApiClient初期化失敗詳細: {traceback.format_exc()}")
 
     # Railway 環境では単一ポート($PORT)のみ公開されるため、WebSocketサーバーをそのポートで起動し、
     # HTTPヘルスチェック/OTAはwebsocketsのprocess_requestで応答する。

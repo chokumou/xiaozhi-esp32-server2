@@ -178,9 +178,10 @@ async def handleAudioMessage(conn, audio):
 
     if have_voice:
         if conn.client_is_speaking:
-            # Disable barge-in: ignore incoming audio while server is speaking (debug only)
-            conn.logger.bind(tag=TAG).debug("Barge-in ignored: speaking=True, incoming audio discarded")
-            return
+            # Enable barge-in: allow user to interrupt while server is speaking
+            conn.logger.bind(tag=TAG).info("※ここだよ！ Barge-in detected: speaking=True, triggering abort")
+            await handleAbortMessage(conn, source="barge_in_interrupt")
+            # Continue processing the audio after abort
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
     # 接收音频
