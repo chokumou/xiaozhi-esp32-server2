@@ -5,7 +5,6 @@
     "dockerfilePath": "Dockerfile-railway"
   },
   "deploy": {
-    "startCommand": "python app.py",
     "healthcheckPath": "/xiaozhi/ota/",
     "healthcheckTimeout": 900,
     "restartPolicyType": "ON_FAILURE",
