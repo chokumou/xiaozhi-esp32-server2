@@ -146,7 +146,8 @@ class MemoryProvider(MemoryProviderBase):
     async def save_memory(self, msgs):
         # 打印使用的模型信息
         model_info = getattr(self.llm, "model_name", str(self.llm.__class__.__name__))
-        logger.bind(tag=TAG).debug(f"使用记忆保存模型: {model_info}")
+        logger.bind(tag=TAG).info(f"※ここだよ！ 使用记忆保存模型: {model_info}")
+        logger.bind(tag=TAG).info(f"※ここだよ！ save_to_file={self.save_to_file}, role_id={self.role_id}")
         api_key = getattr(self.llm, "api_key", None)
         memory_key_msg = check_model_key("记忆总结专用LLM", api_key)
         if memory_key_msg:
@@ -156,6 +157,7 @@ class MemoryProvider(MemoryProviderBase):
             return None
 
         if len(msgs) < 2:
+            logger.bind(tag=TAG).warning(f"※ここだよ！ メッセージ数不足: {len(msgs)}")
             return None
 
         msgStr = ""
@@ -187,13 +189,16 @@ class MemoryProvider(MemoryProviderBase):
             except Exception as e:
                 print("Error:", e)
         else:
+            logger.bind(tag=TAG).info(f"※ここだよ！ LLM記憶要約開始 role_id={self.role_id}")
             result = self.llm.response_no_stream(
                 short_term_memory_prompt_only_content,
                 msgStr,
                 max_tokens=2000,
                 temperature=0.2,
             )
+            logger.bind(tag=TAG).info(f"※ここだよ！ LLM記憶要約完了, nekota-server保存開始")
             save_mem_local_short(self.role_id, result)
+            logger.bind(tag=TAG).info(f"※ここだよ！ nekota-server保存完了")
         logger.bind(tag=TAG).info(f"Save memory successful - Role: {self.role_id}")
 
         return self.short_memory
@@ -203,8 +208,11 @@ class MemoryProvider(MemoryProviderBase):
         try:
             from config.manage_api_client import ManageApiClient
             
+            logger.bind(tag=TAG).info(f"※ここだよ！ メモリー検索開始 query='{query}', role_id={self.role_id}")
+            
             # nekota-server memories search API を呼び出し
             if ManageApiClient._instance:
+                logger.bind(tag=TAG).info(f"※ここだよ！ ManageApiClient使用可能")
                 result = ManageApiClient._instance._execute_request(
                     "GET",
                     f"/api/memory/search",
@@ -213,6 +221,7 @@ class MemoryProvider(MemoryProviderBase):
                         "keyword": query,
                     }
                 )
+                logger.bind(tag=TAG).info(f"※ここだよ！ API応答: {result}")
                 
                 if result and isinstance(result, list) and len(result) > 0:
                     # 検索結果を文字列にまとめて返す
@@ -222,12 +231,20 @@ class MemoryProvider(MemoryProviderBase):
                             memory_texts.append(memory["text"])
                     
                     if memory_texts:
+                        logger.bind(tag=TAG).info(f"※ここだよ！ メモリー検索成功: {len(memory_texts)}件")
                         return "\n".join(memory_texts)
+                    else:
+                        logger.bind(tag=TAG).warning(f"※ここだよ！ メモリー検索結果にtextフィールドなし")
+                else:
+                    logger.bind(tag=TAG).warning(f"※ここだよ！ メモリー検索結果なし")
+            else:
+                logger.bind(tag=TAG).error(f"※ここだよ！ ManageApiClient未初期化")
             
             # フォールバック: ローカルメモリーを返す
+            logger.bind(tag=TAG).info(f"※ここだよ！ フォールバック: ローカルメモリー使用")
             return self.short_memory if self.short_memory else ""
             
         except Exception as e:
-            logger.bind(tag=TAG).error(f"Memory query failed: {e}")
+            logger.bind(tag=TAG).error(f"※ここだよ！ Memory query failed: {e}")
             # エラー時はローカルメモリーを返す
             return self.short_memory if self.short_memory else ""
