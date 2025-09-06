@@ -94,6 +94,7 @@ class TTSProviderBase(ABC):
         )
 
     def to_tts_stream(self, text, opus_handler: Callable[[bytes], None] = None) -> None:
+        logger.bind(tag=TAG).info(f"※ここだよ！ to_tts_stream呼び出し text='{text}', delete_audio_file={self.delete_audio_file}")
         text = MarkdownCleaner.clean_markdown(text)
         try:
             text = sanitize_for_tts(text)
@@ -128,8 +129,18 @@ class TTSProviderBase(ABC):
                         
                         # Send each OPUS frame to queue
                         for i, opus_frame in enumerate(opus_frames):
-                            sentence_type = SentenceType.FIRST if i == 0 else (SentenceType.LAST if i == len(opus_frames)-1 else SentenceType.MIDDLE)
+                            if len(opus_frames) == 1:
+                                # 1フレームの場合は FIRST かつ LAST
+                                sentence_type = SentenceType.FIRST
+                            elif i == 0:
+                                sentence_type = SentenceType.FIRST
+                            elif i == len(opus_frames) - 1:
+                                sentence_type = SentenceType.LAST
+                            else:
+                                sentence_type = SentenceType.MIDDLE
+                            
                             self.tts_audio_queue.put((sentence_type, opus_frame, text if i == 0 else None))
+                            logger.bind(tag=TAG).debug(f"※ここだよ！ キューに追加 frame={i+1}/{len(opus_frames)}, type={sentence_type}, bytes={len(opus_frame)}")
                             
                         logger.bind(tag=TAG).info(f"※ここだよ！ OPUS音声キューに追加完了 frames={len(opus_frames)}")
                         break
