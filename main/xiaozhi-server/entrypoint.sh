@@ -16,6 +16,13 @@ EOF
 echo "Runtime config:" 
 sed -n '1,120p' "${CONFIG_PATH}"
 
+echo "=== Environment Variables Debug ==="
+echo "MANAGER_API_URL: '${MANAGER_API_URL:-UNSET}'"
+echo "MANAGER_API_SECRET: '${MANAGER_API_SECRET:-UNSET}'"
+echo "MEMORY_MODULE: '${MEMORY_MODULE:-UNSET}'"
+echo "QUICK_SAVE: '${QUICK_SAVE:-UNSET}'"
+echo "=== End Environment Variables ==="
+
 # Execute the original command
 echo "--- ENTRYPOINT DEBUG: start ---"
 echo "PWD: $(pwd)"

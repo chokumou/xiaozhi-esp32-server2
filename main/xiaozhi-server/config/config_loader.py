@@ -33,10 +33,21 @@ def load_config():
     custom_config = {}
     if os.path.exists(custom_config_path):
         custom_config = read_config(custom_config_path) or {}
+        print(f"※ここだよ！ custom_config読み込み成功: {custom_config_path}")
+        print(f"※ここだよ！ custom_config内容: {custom_config}")
+    else:
+        print(f"※ここだよ！ custom_config_pathが存在しません: {custom_config_path}")
 
-    if custom_config.get("manager-api", {}).get("url") and custom_config.get("manager-api", {}).get("secret"):
+    manager_api_config = custom_config.get("manager-api", {})
+    url = manager_api_config.get("url", "")
+    secret = manager_api_config.get("secret", "")
+    print(f"※ここだよ！ manager-api URL: '{url}', Secret: '{secret[:10]}...' (length={len(secret)})")
+
+    if url and secret:
+        print("※ここだよ！ APIから設定を取得します")
         config = get_config_from_api(custom_config)
     else:
+        print("※ここだよ！ ローカル設定をマージします")
         # 合并配置
         config = merge_configs(default_config, custom_config)
     # 初始化目录
