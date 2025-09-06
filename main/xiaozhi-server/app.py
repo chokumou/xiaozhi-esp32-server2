@@ -50,7 +50,11 @@ async def main():
     # ManageApiClient初期化
     try:
         from config.manage_api_client import ManageApiClient
-        if config.get("manager-api"):
+        manager_api_config = config.get("manager-api")
+        logger.bind(tag=TAG).info(f"※ここだよ！ config全体: {list(config.keys())}")
+        logger.bind(tag=TAG).info(f"※ここだよ！ manager-api設定: {manager_api_config}")
+        
+        if manager_api_config:
             api_client = ManageApiClient(config)
             logger.bind(tag=TAG).info("※ここだよ！ ManageApiClient初期化成功")
         else:

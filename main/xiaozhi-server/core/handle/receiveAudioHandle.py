@@ -179,8 +179,17 @@ async def handleAudioMessage(conn, audio):
     if have_voice:
         if conn.client_is_speaking:
             # Enable barge-in: allow user to interrupt while server is speaking
-            conn.logger.bind(tag=TAG).info("※ここだよ！ Barge-in detected: speaking=True, triggering abort")
-            await handleAbortMessage(conn, source="barge_in_interrupt")
+            # However, avoid over-triggering by checking if significant audio is detected
+            try:
+                # Only trigger abort if this is significant voice activity (not just noise)
+                if len(audio) > 100:  # More than 100 bytes suggests real voice
+                    conn.logger.bind(tag=TAG).info("※ここだよ！ Barge-in detected: speaking=True, triggering abort")
+                    await handleAbortMessage(conn, source="barge_in_interrupt")
+                else:
+                    conn.logger.bind(tag=TAG).debug("※ここだよ！ Small audio packet during speaking, ignoring")
+                    return
+            except Exception:
+                pass
             # Continue processing the audio after abort
     # 设备长时间空闲检测，用于say goodbye
     await no_voice_close_connect(conn, have_voice)
