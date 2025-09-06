@@ -17,6 +17,7 @@ class TTSProvider(TTSProviderBase):
         else:
             self.voice = config.get("voice")
         self.audio_file_type = config.get("format", "mp3")
+        logger.bind(tag=TAG).info(f"※ここだよ！ EdgeTTS初期化完了 voice={self.voice}, audio_file_type={self.audio_file_type}")
 
     def generate_filename(self, extension=".mp3"):
         return os.path.join(

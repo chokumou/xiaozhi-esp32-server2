@@ -112,12 +112,19 @@ class TTSProviderBase(ABC):
                         opus_frames = []
                         def collect_opus_frame(frame_data):
                             opus_frames.append(frame_data)
+                            logger.bind(tag=TAG).debug(f"※ここだよ！ OPUS frame collected: {len(frame_data)} bytes")
                             
-                        audio_bytes_to_data_stream(
-                            audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=collect_opus_frame
-                        )
-                        
-                        logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換完了 frames={len(opus_frames)}")
+                        try:
+                            logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換開始 audio_file_type={self.audio_file_type}")
+                            audio_bytes_to_data_stream(
+                                audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=collect_opus_frame
+                            )
+                            logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換完了 frames={len(opus_frames)}")
+                        except Exception as e:
+                            logger.bind(tag=TAG).error(f"※ここだよ！ OPUS変換エラー: {e}")
+                            import traceback
+                            logger.bind(tag=TAG).error(f"※ここだよ！ OPUS変換エラー詳細: {traceback.format_exc()}")
+                            break
                         
                         # Send each OPUS frame to queue
                         for i, opus_frame in enumerate(opus_frames):
