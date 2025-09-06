@@ -156,9 +156,11 @@ class MemoryProvider(MemoryProviderBase):
             logger.bind(tag=TAG).error("LLM is not set for memory provider")
             return None
 
-        if len(msgs) < 2:
+        if len(msgs) < 1:
             logger.bind(tag=TAG).warning(f"※ここだよ！ メッセージ数不足: {len(msgs)}")
             return None
+            
+        logger.bind(tag=TAG).info(f"※ここだよ！ メッセージ数OK: {len(msgs)}個、記憶保存処理開始")
 
         msgStr = ""
         for msg in msgs:
@@ -218,9 +220,26 @@ class MemoryProvider(MemoryProviderBase):
             # save_to_file=Trueの場合はローカルファイルのみ使用、API呼び出しをスキップ
             if self.save_to_file:
                 logger.bind(tag=TAG).info(f"※ここだよ！ ローカルファイルモード：API呼び出しをスキップ")
-                # ローカルファイルから記憶検索の処理をここに実装
-                # 現在は空の結果を返す（後で実装）
-                return []
+                
+                # ローカルファイルから記憶検索
+                try:
+                    if os.path.exists(self.memory_path):
+                        with open(self.memory_path, "r", encoding="utf-8") as f:
+                            all_memory = yaml.safe_load(f) or {}
+                        
+                        user_memory = all_memory.get(self.role_id, "")
+                        if user_memory:
+                            logger.bind(tag=TAG).info(f"※ここだよ！ ローカル記憶発見: {user_memory[:100]}...")
+                            return user_memory
+                        else:
+                            logger.bind(tag=TAG).info(f"※ここだよ！ ローカル記憶が見つかりません role_id={self.role_id}")
+                            return ""
+                    else:
+                        logger.bind(tag=TAG).info(f"※ここだよ！ メモリーファイルが存在しません: {self.memory_path}")
+                        return ""
+                except Exception as e:
+                    logger.bind(tag=TAG).error(f"※ここだよ！ ローカル記憶読み込みエラー: {e}")
+                    return ""
             
             # nekota-server memories search API を呼び出し
             if ManageApiClient._instance:
