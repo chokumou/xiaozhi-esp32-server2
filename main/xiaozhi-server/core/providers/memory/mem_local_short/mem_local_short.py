@@ -196,9 +196,14 @@ class MemoryProvider(MemoryProviderBase):
                 max_tokens=2000,
                 temperature=0.2,
             )
-            logger.bind(tag=TAG).info(f"※ここだよ！ LLM記憶要約完了, nekota-server保存開始")
-            save_mem_local_short(self.role_id, result)
-            logger.bind(tag=TAG).info(f"※ここだよ！ nekota-server保存完了")
+            if self.save_to_file:
+                logger.bind(tag=TAG).info(f"※ここだよ！ LLM記憶要約完了, ローカルファイル保存開始")
+                # ローカルファイル保存は既にsave_memory_to_file()で実行済み
+                logger.bind(tag=TAG).info(f"※ここだよ！ ローカルファイル保存完了")
+            else:
+                logger.bind(tag=TAG).info(f"※ここだよ！ LLM記憶要約完了, nekota-server保存開始")
+                save_mem_local_short(self.role_id, result)
+                logger.bind(tag=TAG).info(f"※ここだよ！ nekota-server保存完了")
         logger.bind(tag=TAG).info(f"Save memory successful - Role: {self.role_id}")
 
         return self.short_memory
@@ -209,6 +214,13 @@ class MemoryProvider(MemoryProviderBase):
             from config.manage_api_client import ManageApiClient
             
             logger.bind(tag=TAG).info(f"※ここだよ！ メモリー検索開始 query='{query}', role_id={self.role_id}")
+            
+            # save_to_file=Trueの場合はローカルファイルのみ使用、API呼び出しをスキップ
+            if self.save_to_file:
+                logger.bind(tag=TAG).info(f"※ここだよ！ ローカルファイルモード：API呼び出しをスキップ")
+                # ローカルファイルから記憶検索の処理をここに実装
+                # 現在は空の結果を返す（後で実装）
+                return []
             
             # nekota-server memories search API を呼び出し
             if ManageApiClient._instance:
