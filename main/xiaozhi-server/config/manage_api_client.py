@@ -63,7 +63,19 @@ class ManageApiClient:
     def _request(cls, method: str, endpoint: str, **kwargs) -> Dict:
         """发送单次HTTP请求并处理响应"""
         endpoint = endpoint.lstrip("/")
+        
+        # デバッグ用ログ追加
+        print(f"※ここだよ！ API Request: {method} {cls._client.base_url}/{endpoint}")
+        print(f"※ここだよ！ Authorization Header: Bearer {cls._secret[:10]}...")
+        print(f"※ここだよ！ Request Headers: {dict(cls._client.headers)}")
+        
         response = cls._client.request(method, endpoint, **kwargs)
+        
+        print(f"※ここだよ！ Response Status: {response.status_code}")
+        print(f"※ここだよ！ Response Headers: {dict(response.headers)}")
+        if response.status_code != 200:
+            print(f"※ここだよ！ Response Body: {response.text}")
+        
         response.raise_for_status()
 
         result = response.json()
