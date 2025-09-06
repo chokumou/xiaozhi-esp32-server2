@@ -37,7 +37,7 @@ class ASRProviderBase(ABC):
     def asr_text_priority_thread(self, conn):
         while not conn.stop_event.is_set():
             try:
-                message = conn.asr_audio_queue.get(timeout=1)
+                message = conn.asr_audio_queue.get(timeout=3)  # 1秒→3秒に延長
                 future = asyncio.run_coroutine_threadsafe(
                     handleAudioMessage(conn, message),
                     conn.loop,
@@ -331,12 +331,12 @@ class ASRProviderBase(ABC):
                     voiceprint_future = thread_executor.submit(run_voiceprint)
                     
                     # 等待两个线程都完成
-                    asr_result = asr_future.result(timeout=15)
+                    asr_result = asr_future.result(timeout=30)  # 15秒→30秒に延長
                     voiceprint_result = voiceprint_future.result(timeout=15)
                     
                     results = {"asr": asr_result, "voiceprint": voiceprint_result}
                 else:
-                    asr_result = asr_future.result(timeout=15)
+                    asr_result = asr_future.result(timeout=30)  # 15秒→30秒に延長
                     results = {"asr": asr_result, "voiceprint": None}
             
             

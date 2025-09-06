@@ -151,6 +151,15 @@ async def main():
             config["QUICK_SAVE"] = "0"  # ローカルファイル保存を強制
             os.environ["QUICK_SAVE"] = "0"  # 環境変数も更新してASRのQUICK_SAVE機能を無効化
             
+            # 古いメモリーファイルをクリーンアップ（一回だけ実行）
+            try:
+                memory_file = "/opt/xiaozhi-esp32-server/data/.memory.yaml"
+                if os.path.exists(memory_file):
+                    os.remove(memory_file)
+                    logger.bind(tag=TAG).info("※ここだよ！ 古いメモリーファイルを削除してクリーンスタート")
+            except Exception as e:
+                logger.bind(tag=TAG).warning(f"※ここだよ！ メモリーファイル削除失敗: {e}")
+            
             logger.bind(tag=TAG).info("※ここだよ！ 実行時設定注入完了")
             logger.bind(tag=TAG).info(f"※ここだよ！ 注入後manager-api設定: {config.get('manager-api')}")
         else:
