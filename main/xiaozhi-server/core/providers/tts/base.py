@@ -106,12 +106,25 @@ class TTSProviderBase(ABC):
                 try:
                     audio_bytes = asyncio.run(self.text_to_speak(text, None))
                     if audio_bytes:
-                        self.tts_audio_queue.put(
-                            (SentenceType.FIRST, None, text)
-                        )
+                        logger.bind(tag=TAG).info(f"※ここだよ！ TTS音声バイナリ生成完了 bytes={len(audio_bytes)}, text='{text}'")
+                        
+                        # Collect OPUS frames
+                        opus_frames = []
+                        def collect_opus_frame(frame_data):
+                            opus_frames.append(frame_data)
+                            
                         audio_bytes_to_data_stream(
-                            audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=opus_handler
+                            audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=collect_opus_frame
                         )
+                        
+                        logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換完了 frames={len(opus_frames)}")
+                        
+                        # Send each OPUS frame to queue
+                        for i, opus_frame in enumerate(opus_frames):
+                            sentence_type = SentenceType.FIRST if i == 0 else (SentenceType.LAST if i == len(opus_frames)-1 else SentenceType.MIDDLE)
+                            self.tts_audio_queue.put((sentence_type, opus_frame, text if i == 0 else None))
+                            
+                        logger.bind(tag=TAG).info(f"※ここだよ！ OPUS音声キューに追加完了 frames={len(opus_frames)}")
                         break
                     else:
                         max_repeat_time -= 1

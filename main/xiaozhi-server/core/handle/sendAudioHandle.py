@@ -2,11 +2,15 @@ import json
 import time
 from core.providers.tts.dto.dto import SentenceType
 from core.utils import textUtils
+from config.logger import setup_logging
 
 TAG = __name__
+logger = setup_logging()
 
 
 async def sendAudioMessage(conn, sentenceType, audios, text):
+    logger.bind(tag=TAG).info(f"※ここだよ！ sendAudioMessage呼び出し sentenceType={sentenceType}, text='{text}', audios_type={type(audios)}, audios_len={len(audios) if hasattr(audios, '__len__') else 'N/A'}")
+    
     if conn.tts.tts_audio_first_sentence:
         conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
         conn.tts.tts_audio_first_sentence = False
@@ -31,10 +35,21 @@ async def sendAudioMessage(conn, sentenceType, audios, text):
 # 播放音频
 async def sendAudio(conn, audios):
     if audios is None:
+        logger.bind(tag=TAG).warning(f"※ここだよ！ 音声データなし: audios=None")
         return
     # 如果audios不是opus数组，则不需要进行遍历，可以直接发送;这里需要进行流控管理，防止发送过快引发客户端溢出
     if isinstance(audios, bytes):
-        await conn.websocket.send(audios)
+        logger.bind(tag=TAG).info(f"※ここだよ！ WebSocket音声送信開始 bytes={len(audios)}")
+        try:
+            if hasattr(conn, 'websocket') and conn.websocket:
+                await conn.websocket.send(audios)
+                logger.bind(tag=TAG).info(f"※ここだよ！ WebSocket音声送信完了 bytes={len(audios)}")
+            else:
+                logger.bind(tag=TAG).error(f"※ここだよ！ WebSocket未接続: conn.websocket={getattr(conn, 'websocket', None)}")
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"※ここだよ！ WebSocket音声送信エラー: {e}")
+    else:
+        logger.bind(tag=TAG).warning(f"※ここだよ！ 予期しない音声データ形式: type={type(audios)}, len={len(audios) if hasattr(audios, '__len__') else 'N/A'}")
 
 
 async def send_tts_message(conn, state, text=None):
