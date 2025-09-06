@@ -11,6 +11,8 @@ import requests
 # Delayed imports for heavy optional dependencies to avoid import-time failures
 # opuslib_next and pydub are imported inside functions that need them.
 import copy
+from pydub import AudioSegment
+import opuslib_next
 
 TAG = __name__
 emoji_map = {
