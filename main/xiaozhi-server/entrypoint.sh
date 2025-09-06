@@ -5,11 +5,24 @@ echo "=== ENTRYPOINT.SH STARTING ==="
 echo "Timestamp: $(date)"
 echo "PWD: $(pwd)"
 echo "USER: $(whoami)"
+
+# Safety checks
+if ! command -v python >/dev/null 2>&1; then
+    echo "ERROR: Python not found in PATH"
+    exit 1
+fi
+
+echo "Python version: $(python --version)"
 echo "Files in current directory:"
-ls -la
+ls -la || echo "ls failed"
 
 # Generate runtime config from environment variables if not provided
-mkdir -p "$(pwd)/data"
+echo "Creating data directory..."
+mkdir -p "$(pwd)/data" || {
+    echo "ERROR: Failed to create data directory"
+    exit 1
+}
+
 CONFIG_PATH="$(pwd)/data/.config.yaml"
 echo "Generating runtime config to ${CONFIG_PATH}"
 cat > "${CONFIG_PATH}" <<EOF
@@ -57,7 +70,16 @@ except Exception as e:
 PY
 echo "--- ENTRYPOINT DEBUG: end ---"
 
-exec python app.py
+echo "Starting Python application..."
+if [ -f "app.py" ]; then
+    echo "app.py found, executing..."
+    exec python app.py
+else
+    echo "ERROR: app.py not found in $(pwd)"
+    echo "Available Python files:"
+    find . -name "*.py" -maxdepth 2
+    exit 1
+fi
 
 #!/usr/bin/env bash
 set -euo pipefail
