@@ -1,7 +1,15 @@
 #!/bin/sh
 set -e
 
+echo "=== ENTRYPOINT.SH STARTING ==="
+echo "Timestamp: $(date)"
+echo "PWD: $(pwd)"
+echo "USER: $(whoami)"
+echo "Files in current directory:"
+ls -la
+
 # Generate runtime config from environment variables if not provided
+mkdir -p "$(pwd)/data"
 CONFIG_PATH="$(pwd)/data/.config.yaml"
 echo "Generating runtime config to ${CONFIG_PATH}"
 cat > "${CONFIG_PATH}" <<EOF

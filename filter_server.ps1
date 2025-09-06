@@ -4,3 +4,5 @@ Get-Content .\server.log -Wait -Tail 0 |
   Select-String -Pattern ($patterns -join "|") |
   Tee-Object server_filtered.log
 
+
+
