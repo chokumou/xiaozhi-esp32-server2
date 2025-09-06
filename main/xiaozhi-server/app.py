@@ -145,7 +145,10 @@ async def main():
                 "secret": manager_api_secret
             }
             config["selected_module"]["Memory"] = memory_module
-            config["QUICK_SAVE"] = quick_save
+            
+            # 認証問題の一時回避：QUICK_SAVE=0でローカルファイルモードに強制切り替え
+            logger.bind(tag=TAG).warning("※ここだよ！ 認証問題対策でローカルメモリーモードを強制有効化")
+            config["QUICK_SAVE"] = "0"  # ローカルファイル保存を強制
             
             logger.bind(tag=TAG).info("※ここだよ！ 実行時設定注入完了")
             logger.bind(tag=TAG).info(f"※ここだよ！ 注入後manager-api設定: {config.get('manager-api')}")
