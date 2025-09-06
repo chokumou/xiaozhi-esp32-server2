@@ -723,11 +723,18 @@ class ConnectionHandler:
         if self.memory is None:
             return
         """初始化记忆模块"""
+        
+        # QUICK_SAVE設定をチェック：0=ローカルファイル保存、1=API保存
+        quick_save = self.config.get("QUICK_SAVE", "0")
+        use_local_file = quick_save == "0"
+        
+        self.logger.bind(tag=TAG).info(f"※ここだよ！ メモリー初期化: QUICK_SAVE={quick_save}, save_to_file={use_local_file}")
+        
         self.memory.init_memory(
             role_id=self.device_id,
             llm=self.llm,
             summary_memory=self.config.get("summaryMemory", None),
-            save_to_file=not self.read_config_from_api,
+            save_to_file=use_local_file,
         )
 
         # 获取记忆总结配置
