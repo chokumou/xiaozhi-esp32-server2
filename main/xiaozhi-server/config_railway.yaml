@@ -104,10 +104,10 @@ Intent:
       - get_weather
       - get_news_from_newsnow
 
-# 記憶機能は無効
+# 記憶機能を有効化
 Memory:
-  nomem:
-    type: nomem
+  mem_local_short:
+    type: mem_local_short
 
 # Character setting (Japanese)
 prompt: "あなたは優しい日本語のAIアシスタントです。常に日本語で自然に、ていねいに話します。猫っぽい表現は控えめにし、ユーザーの意図を正確に理解して簡潔に答えてください。"
