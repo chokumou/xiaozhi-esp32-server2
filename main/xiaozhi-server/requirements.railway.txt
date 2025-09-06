@@ -36,5 +36,7 @@ cnlunar==0.2.0
 openai>=1.0.0
 # Edge TTS (required for text-to-speech)
 edge-tts>=6.1.0
+# MCP (Model Context Protocol) - required for ServerMCPExecutor
+mcp>=0.1.0
 
 
