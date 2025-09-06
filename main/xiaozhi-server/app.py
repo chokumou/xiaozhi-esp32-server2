@@ -4,6 +4,7 @@ import signal
 import asyncio
 from aioconsole import ainput
 import os
+import yaml
 from config.settings import load_config
 from config.logger import setup_logging
 from core.utils.util import get_local_ip, validate_mcp_endpoint
@@ -13,6 +14,48 @@ from core.utils.util import check_ffmpeg_installed
 
 TAG = __name__
 logger = setup_logging()
+
+
+def ensure_runtime_config():
+    """Railway環境で設定ファイルが無い場合、環境変数から生成"""
+    config_path = "/opt/xiaozhi-esp32-server/data/.config.yaml"
+    
+    # ディレクトリ作成
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    
+    # 設定ファイルが存在しない、かつ環境変数が設定されている場合のみ生成
+    if not os.path.exists(config_path):
+        manager_api_url = os.getenv("MANAGER_API_URL", "")
+        manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
+        memory_module = os.getenv("MEMORY_MODULE", "nomem")
+        quick_save = os.getenv("QUICK_SAVE", "0")
+        
+        logger.bind(tag=TAG).info(f"※ここだよ！ 環境変数から設定ファイル生成: {config_path}")
+        logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_URL: '{manager_api_url}'")
+        logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_SECRET: '{manager_api_secret[:10]}...' (length={len(manager_api_secret)})")
+        logger.bind(tag=TAG).info(f"※ここだよ！ MEMORY_MODULE: '{memory_module}'")
+        logger.bind(tag=TAG).info(f"※ここだよ！ QUICK_SAVE: '{quick_save}'")
+        
+        if manager_api_url and manager_api_secret:
+            config_data = {
+                "manager-api": {
+                    "url": manager_api_url,
+                    "secret": manager_api_secret
+                },
+                "selected_module": {
+                    "Memory": memory_module
+                },
+                "QUICK_SAVE": quick_save
+            }
+            
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+            
+            logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
+        else:
+            logger.bind(tag=TAG).warning("※ここだよ！ 環境変数不足のため設定ファイル生成をスキップ")
+    else:
+        logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル既存: {config_path}")
 
 
 async def wait_for_exit() -> None:
@@ -45,6 +88,10 @@ async def monitor_stdin():
 
 async def main():
     check_ffmpeg_installed()
+    
+    # Railway環境用の設定ファイル生成
+    ensure_runtime_config()
+    
     config = load_config()
     
     # ManageApiClient初期化
