@@ -64,8 +64,26 @@ def ensure_runtime_config():
                 
                 with open(config_path, 'w', encoding='utf-8') as f:
                     yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
+                    f.flush()  # 強制的にディスクに書き込み
+                    os.fsync(f.fileno())  # システムレベルでの同期
                 
-                logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
+                # 書き込み確認
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        verify_content = f.read()
+                    logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
+                    logger.bind(tag=TAG).info(f"※ここだよ！ 書き込み確認成功: {len(verify_content)}文字")
+                else:
+                    logger.bind(tag=TAG).error(f"※ここだよ！ 設定ファイル書き込み失敗: {config_path}")
+                
+                # キャッシュをクリアして再読み込みを強制
+                try:
+                    from core.utils.cache.manager import cache_manager, CacheType
+                    cache_manager.clear(CacheType.CONFIG, "main_config")
+                    logger.bind(tag=TAG).info("※ここだよ！ 設定キャッシュをクリア")
+                except Exception as e:
+                    logger.bind(tag=TAG).warning(f"※ここだよ！ キャッシュクリア失敗: {e}")
+                
                 return  # 成功したら終了
             else:
                 logger.bind(tag=TAG).warning("※ここだよ！ 環境変数不足のため設定ファイル生成をスキップ")
