@@ -126,7 +126,31 @@ async def main():
     # Railway環境用の設定ファイル生成
     ensure_runtime_config()
     
+    # 設定ファイルが消失する問題の回避策：実行時に直接設定を注入
     config = load_config()
+    
+    # manager-api設定が読み込まれていない場合、環境変数から直接注入
+    if not config.get("manager-api"):
+        manager_api_url = os.getenv("MANAGER_API_URL", "")
+        manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
+        memory_module = os.getenv("MEMORY_MODULE", "nomem")
+        quick_save = os.getenv("QUICK_SAVE", "0")
+        
+        if manager_api_url and manager_api_secret:
+            logger.bind(tag=TAG).warning("※ここだよ！ 設定ファイル問題を検出、実行時注入を実行")
+            
+            # 実行時に設定を直接注入
+            config["manager-api"] = {
+                "url": manager_api_url,
+                "secret": manager_api_secret
+            }
+            config["selected_module"]["Memory"] = memory_module
+            config["QUICK_SAVE"] = quick_save
+            
+            logger.bind(tag=TAG).info("※ここだよ！ 実行時設定注入完了")
+            logger.bind(tag=TAG).info(f"※ここだよ！ 注入後manager-api設定: {config.get('manager-api')}")
+        else:
+            logger.bind(tag=TAG).error("※ここだよ！ 環境変数も取得できません")
     
     # ManageApiClient初期化
     try:
