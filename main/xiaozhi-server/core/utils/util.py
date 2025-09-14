@@ -8,11 +8,9 @@ from typing import Callable, Any
 from core.utils import p3
 import numpy as np
 import requests
-# Delayed imports for heavy optional dependencies to avoid import-time failures
-# opuslib_next and pydub are imported inside functions that need them.
-import copy
-from pydub import AudioSegment
 import opuslib_next
+from pydub import AudioSegment
+import copy
 
 TAG = __name__
 emoji_map = {
@@ -235,30 +233,17 @@ def audio_bytes_to_data_stream(audio_bytes, file_type, is_opus, callback: Callab
     """
     直接用音频二进制数据转为opus/pcm数据，支持wav、mp3、p3
     """
-    try:
-        print(f"※ここだよ！ audio_bytes_to_data_stream開始 file_type={file_type}, is_opus={is_opus}, bytes={len(audio_bytes) if audio_bytes else 'None'}")
-        
-        if file_type == "p3":
-            # 直接用p3解码
-            print(f"※ここだよ！ p3形式で解码开始")
-            return p3.decode_opus_from_bytes_stream(audio_bytes, callback)
-        else:
-            # 其他格式用pydub
-            print(f"※ここだよ！ pydub形式で解析开始 format={file_type}")
-            audio = AudioSegment.from_file(
-                BytesIO(audio_bytes), format=file_type, parameters=["-nostdin"]
-            )
-            print(f"※ここだよ！ AudioSegment読み込み完了 duration={len(audio)}ms")
-            audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
-            raw_data = audio.raw_data
-            print(f"※ここだよ！ raw_data取得完了 bytes={len(raw_data)}")
-            pcm_to_data_stream(raw_data, is_opus, callback)
-            print(f"※ここだよ！ pcm_to_data_stream完了")
-    except Exception as e:
-        print(f"※ここだよ！ audio_bytes_to_data_stream エラー: {e}")
-        import traceback
-        print(f"※ここだよ！ audio_bytes_to_data_stream エラー詳細: {traceback.format_exc()}")
-        raise
+    if file_type == "p3":
+        # 直接用p3解码
+        return p3.decode_opus_from_bytes_stream(audio_bytes, callback)
+    else:
+        # 其他格式用pydub
+        audio = AudioSegment.from_file(
+            BytesIO(audio_bytes), format=file_type, parameters=["-nostdin"]
+        )
+        audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+        raw_data = audio.raw_data
+        pcm_to_data_stream(raw_data, is_opus, callback)
 
 
 def pcm_to_data_stream(raw_data, is_opus=True, callback: Callable[[Any], Any] = None):

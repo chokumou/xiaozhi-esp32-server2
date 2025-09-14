@@ -4,9 +4,10 @@
 server:
   ip: 0.0.0.0
   port: 8000
-  http_port: 8000
-  websocket: "wss://xiaozhi-esp32-server2-production.up.railway.app/xiaozhi/v1/"
-  vision_explain: "https://xiaozhi-esp32-server2-production.up.railway.app/mcp/vision/explain"
+  http_port: 8003
+  # ローカルテスト用URL
+  websocket: "ws://192.168.2.100:8000/xiaozhi/v1/"
+  vision_explain: "http://192.168.2.100:8003/mcp/vision/explain"
   timezone_offset: +8
   auth:
     enabled: false
@@ -14,7 +15,7 @@ server:
 log:
   log_format: "<green>{time:YYMMDD HH:mm:ss}</green>[{version}_{selected_module}][<light-blue>{extra[tag]}</light-blue>]-<level>{level}</level>-<light-green>{message}</light-green>"
   log_format_file: "{time:YYYY-MM-DD HH:mm:ss} - {version}_{selected_module} - {name} - {level} - {extra[tag]} - {message}"
-  log_level: DEBUG
+  log_level: INFO
   log_dir: tmp
   log_file: "server.log"
   data_dir: data
@@ -23,8 +24,6 @@ delete_audio: true
 close_connection_no_voice_time: 120
 tts_timeout: 10
 enable_stop_tts_notify: false
-tts_start_lock_ms: 1800
-asr_min_pcm_bytes: 24000
 
 exit_commands:
   - "退出"
@@ -56,43 +55,39 @@ wakeup_words:
 # 基本的な機能のみ有効化
 selected_module:
   VAD: WebRTCVAD
-  ASR: OpenAIASR
-  LLM: OpenAILLM
+  ASR: FunASR
+  LLM: ChatGLMLLM
   VLLM: ChatGLMVLLM
   TTS: EdgeTTS
-  Memory: mem_local_short
+  Memory: nomem
   Intent: function_call
 
-# LLM設定（OpenAI）
+# 無料のLLM設定
 LLM:
-  OpenAILLM:
+  ChatGLMLLM:
     type: openai
-    model_name: gpt-4o-mini
-    url: https://api.openai.com/v1/
-    api_key: ${OPENAI_API_KEY}
+    model_name: glm-4-flash
+    url: https://open.bigmodel.cn/api/paas/v4/
+    api_key: ${CHATGLM_API_KEY}  # 環境変数から取得
 
-# TTS設定（EdgeTTS：ESP32クライアントが期待するOPUSへ変換されます）
+# 無料のTTS設定
 TTS:
   EdgeTTS:
     type: edge
-    voice: ja-JP-NanamiNeural
+    voice: zh-CN-XiaoxiaoNeural
     output_dir: tmp/
 
 # 音声活動検出
 VAD:
   WebRTCVAD:
     type: webrtc
-    aggressiveness: 1
-    min_silence_duration_ms: 2000
-    silence_false_frames: 64
+    aggressiveness: 3
 
-# 音声認識（OpenAI Whisper API）
+# ローカル音声認識
 ASR:
-  OpenAIASR:
-    type: openai
-    base_url: https://api.openai.com/v1/audio/transcriptions
-    model_name: gpt-4o-mini-transcribe
-    api_key: ${OPENAI_API_KEY}
+  FunASR:
+    type: fun_local
+    model_dir: models/SenseVoiceSmall
     output_dir: tmp/
 
 # 基本的な機能のみ
@@ -104,13 +99,13 @@ Intent:
       - get_weather
       - get_news_from_newsnow
 
-# 記憶機能を有効化
+# 記憶機能は無効
 Memory:
-  mem_local_short:
-    type: mem_local_short
+  nomem:
+    type: nomem
 
-# Character setting (Japanese)
-prompt: "あなたは優しい日本語のAIアシスタントです。常に日本語で自然に、ていねいに話します。猫っぽい表現は控えめにし、ユーザーの意図を正確に理解して簡潔に答えてください。"
+# Character setting (Nekota style)
+prompt: "You are nekota, a cute cat girl AI assistant. You have the gentleness and curiosity of a cat, and often use cute cat language like 'nya~' and 'nyan' when speaking."
 
 # プラグイン設定
 plugins:

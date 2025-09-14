@@ -26,3 +26,4 @@ public class DeviceRegisterResponse {
     public String getServerUrl() { return serverUrl; }
     public void setServerUrl(String serverUrl) { this.serverUrl = serverUrl; }
 }
+

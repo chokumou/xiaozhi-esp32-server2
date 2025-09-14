@@ -9,7 +9,6 @@ from core.utils import p3
 import time
 from datetime import datetime
 from core.utils import textUtils
-from core.utils.text_sanitize import sanitize_for_tts
 from abc import ABC, abstractmethod
 from config.logger import setup_logging
 from core.utils.audio_flow_control import FlowControlConfig
@@ -94,12 +93,7 @@ class TTSProviderBase(ABC):
         )
 
     def to_tts_stream(self, text, opus_handler: Callable[[bytes], None] = None) -> None:
-        logger.bind(tag=TAG).info(f"※ここだよ！ to_tts_stream呼び出し text='{text}', delete_audio_file={self.delete_audio_file}")
         text = MarkdownCleaner.clean_markdown(text)
-        try:
-            text = sanitize_for_tts(text)
-        except Exception:
-            pass
         max_repeat_time = 5
         if self.delete_audio_file:
             # 需要删除文件的直接转为音频数据
@@ -107,42 +101,12 @@ class TTSProviderBase(ABC):
                 try:
                     audio_bytes = asyncio.run(self.text_to_speak(text, None))
                     if audio_bytes:
-                        logger.bind(tag=TAG).info(f"※ここだよ！ TTS音声バイナリ生成完了 bytes={len(audio_bytes)}, text='{text}'")
-                        
-                        # Collect OPUS frames
-                        opus_frames = []
-                        def collect_opus_frame(frame_data):
-                            opus_frames.append(frame_data)
-                            logger.bind(tag=TAG).debug(f"※ここだよ！ OPUS frame collected: {len(frame_data)} bytes")
-                            
-                        try:
-                            logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換開始 audio_file_type={self.audio_file_type}")
-                            audio_bytes_to_data_stream(
-                                audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=collect_opus_frame
-                            )
-                            logger.bind(tag=TAG).info(f"※ここだよ！ OPUS変換完了 frames={len(opus_frames)}")
-                        except Exception as e:
-                            logger.bind(tag=TAG).error(f"※ここだよ！ OPUS変換エラー: {e}")
-                            import traceback
-                            logger.bind(tag=TAG).error(f"※ここだよ！ OPUS変換エラー詳細: {traceback.format_exc()}")
-                            break
-                        
-                        # Send each OPUS frame to queue
-                        for i, opus_frame in enumerate(opus_frames):
-                            if len(opus_frames) == 1:
-                                # 1フレームの場合は FIRST かつ LAST
-                                sentence_type = SentenceType.FIRST
-                            elif i == 0:
-                                sentence_type = SentenceType.FIRST
-                            elif i == len(opus_frames) - 1:
-                                sentence_type = SentenceType.LAST
-                            else:
-                                sentence_type = SentenceType.MIDDLE
-                            
-                            self.tts_audio_queue.put((sentence_type, opus_frame, text if i == 0 else None))
-                            logger.bind(tag=TAG).debug(f"※ここだよ！ キューに追加 frame={i+1}/{len(opus_frames)}, type={sentence_type}, bytes={len(opus_frame)}")
-                            
-                        logger.bind(tag=TAG).info(f"※ここだよ！ OPUS音声キューに追加完了 frames={len(opus_frames)}")
+                        self.tts_audio_queue.put(
+                            (SentenceType.FIRST, None, text)
+                        )
+                        audio_bytes_to_data_stream(
+                            audio_bytes, file_type=self.audio_file_type, is_opus=True, callback=opus_handler
+                        )
                         break
                     else:
                         max_repeat_time -= 1

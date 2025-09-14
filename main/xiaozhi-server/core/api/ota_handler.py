@@ -1,7 +1,6 @@
 import json
 import time
 from aiohttp import web
-import os
 from core.utils.util import get_local_ip
 from core.api.base_handler import BaseHandler
 
@@ -25,56 +24,54 @@ class OTAHandler(BaseHandler):
         server_config = self.config["server"]
         websocket_config = server_config.get("websocket", "")
 
-        if websocket_config and "你的" not in websocket_config:
+        if "你的" not in websocket_config:
             return websocket_config
         else:
             return f"ws://{local_ip}:{port}/xiaozhi/v1/"
 
     async def handle_post(self, request):
-        """处理 OTA POST 请求（设备からのPOSTは必ず200でJSONを返す）"""
+        """处理 OTA POST 请求"""
         try:
-            # デバイスはJSON以外を送る場合があるため、本文は参照のみ
-            _ = await request.read()
-            self.logger.bind(tag=TAG).debug(f"OTA POST headers: {dict(request.headers)}")
+            data = await request.text()
+            self.logger.bind(tag=TAG).debug(f"OTA请求方法: {request.method}")
+            self.logger.bind(tag=TAG).debug(f"OTA请求头: {request.headers}")
+            self.logger.bind(tag=TAG).debug(f"OTA请求数据: {data}")
+
+            device_id = request.headers.get("device-id", "")
+            if device_id:
+                self.logger.bind(tag=TAG).info(f"OTA请求设备ID: {device_id}")
+            else:
+                raise Exception("OTA请求设备ID为空")
+
+            data_json = json.loads(data)
 
             server_config = self.config["server"]
             port = int(server_config.get("port", 8000))
             local_ip = get_local_ip()
 
-            public_base = os.getenv(
-                "PUBLIC_BASE_URL",
-                "https://xiaozhi-esp32-server2-production.up.railway.app",
-            )
-            # 末尾の空白やセミコロン/スラッシュを除去
-            public_base = public_base.strip().rstrip("/;")
-
-            ws_url = self._get_websocket_url(local_ip, port)
-            ws_url = ws_url.strip().rstrip(";")
-
             return_json = {
-                "firmware": {"version": "1.6.8", "url": ""},
-                "websocket": {"endpoint": public_base, "port": 443},
-                "xiaozhi_websocket": {
-                    "ws_url": ws_url,
-                    "ws_protocol": "v1",
-                    "protocol_version": 1,
-                    "origin": public_base,
+                "server_time": {
+                    "timestamp": int(round(time.time() * 1000)),
+                    "timezone_offset": server_config.get("timezone_offset", 8) * 60,
+                },
+                "firmware": {
+                    "version": data_json["application"].get("version", "1.0.0"),
+                    "url": "",
+                },
+                "websocket": {
+                    "url": self._get_websocket_url(local_ip, port),
                 },
             }
-            response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
-        except Exception:
-            # 例外時も200で空の構造を返す
-            fallback = {
-                "firmware": {"version": "1.6.8", "url": ""},
-                "websocket": {"endpoint": "", "port": 0},
-                "xiaozhi_websocket": {
-                    "ws_url": "",
-                    "ws_protocol": "v1",
-                    "protocol_version": 1,
-                    "origin": "",
-                },
-            }
-            response = web.Response(text=json.dumps(fallback, separators=(",", ":")), content_type="application/json")
+            response = web.Response(
+                text=json.dumps(return_json, separators=(",", ":")),
+                content_type="application/json",
+            )
+        except Exception as e:
+            return_json = {"success": False, "message": "request error."}
+            response = web.Response(
+                text=json.dumps(return_json, separators=(",", ":")),
+                content_type="application/json",
+            )
         finally:
             self._add_cors_headers(response)
             return response
@@ -93,32 +90,13 @@ class OTAHandler(BaseHandler):
             server_config = self.config["server"]
             local_ip = get_local_ip()
             port = int(server_config.get("port", 8000))
-
-            public_base = os.getenv(
-                "PUBLIC_BASE_URL",
-                "https://xiaozhi-esp32-server2-production.up.railway.app",
-            )
-            # 末尾の空白やセミコロン/スラッシュを除去
-            public_base = public_base.strip().rstrip("/;")
-
-            ws_url = self._get_websocket_url(local_ip, port)
-            ws_url = ws_url.strip().rstrip(";")
-
-            return_json = {
-                "firmware": {"version": "1.6.8", "url": ""},
-                "websocket": {"endpoint": public_base, "port": 443},
-                "xiaozhi_websocket": {
-                    "ws_url": ws_url,
-                    "ws_protocol": "v1",
-                    "protocol_version": 1,
-                    "origin": public_base,
-                },
-            }
-
-            self.logger.bind(tag=TAG).info(f"レスポンス: {return_json}")
+            websocket_url = self._get_websocket_url(local_ip, port)
+            message = f"OTA接口运行正常，向设备发送的websocket地址是：{websocket_url}"
+            
+            self.logger.bind(tag=TAG).info(f"レスポンス: {message}")
             self.logger.bind(tag=TAG).info(f"=== OTA GET リクエスト処理完了 ===")
-
-            response = web.Response(text=json.dumps(return_json, separators=(",", ":")), content_type="application/json")
+            
+            response = web.Response(text=message, content_type="text/plain")
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"OTA GET请求异常: {e}")
             response = web.Response(text="OTA接口异常", content_type="text/plain")

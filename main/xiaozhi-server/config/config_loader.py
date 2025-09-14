@@ -27,55 +27,13 @@ def load_config():
     default_config_path = get_project_dir() + "config.yaml"
     custom_config_path = get_project_dir() + "data/.config.yaml"
 
-    print(f"※ここだよ！ get_project_dir(): {get_project_dir()}")
-    print(f"※ここだよ！ default_config_path: {default_config_path}")
-    print(f"※ここだよ！ custom_config_path: {custom_config_path}")
-
     # 加载默认配置
     default_config = read_config(default_config_path)
-    # Railway等ではcustomが空でも起動できるようにする
-    custom_config = {}
-    if os.path.exists(custom_config_path):
-        custom_config = read_config(custom_config_path) or {}
-        print(f"※ここだよ！ custom_config読み込み成功: {custom_config_path}")
-        print(f"※ここだよ！ custom_config内容: {custom_config}")
-    else:
-        print(f"※ここだよ！ custom_config_pathが存在しません: {custom_config_path}")
-        
-        # ファイルシステムの詳細確認
-        import glob
-        data_dir = os.path.dirname(custom_config_path)
-        print(f"※ここだよ！ dataディレクトリ存在確認: {os.path.exists(data_dir)}")
-        if os.path.exists(data_dir):
-            files_in_data = glob.glob(f"{data_dir}/*")
-            print(f"※ここだよ！ dataディレクトリ内ファイル: {files_in_data}")
-        
-        # Railway環境での代替パスもチェック
-        alt_path = "/opt/xiaozhi-esp32-server/data/.config.yaml"
-        print(f"※ここだよ！ 代替パス確認: {alt_path}")
-        if os.path.exists(alt_path):
-            custom_config = read_config(alt_path) or {}
-            print(f"※ここだよ！ 代替パスで設定ファイル発見: {alt_path}")
-            print(f"※ここだよ！ 代替パス設定内容: {custom_config}")
-        else:
-            print(f"※ここだよ！ 代替パスも存在しません: {alt_path}")
-            # さらに詳細なディレクトリ確認
-            alt_dir = os.path.dirname(alt_path)
-            print(f"※ここだよ！ 代替dataディレクトリ存在確認: {os.path.exists(alt_dir)}")
-            if os.path.exists(alt_dir):
-                alt_files = glob.glob(f"{alt_dir}/*")
-                print(f"※ここだよ！ 代替dataディレクトリ内ファイル: {alt_files}")
+    custom_config = read_config(custom_config_path)
 
-    manager_api_config = custom_config.get("manager-api", {})
-    url = manager_api_config.get("url", "")
-    secret = manager_api_config.get("secret", "")
-    print(f"※ここだよ！ manager-api URL: '{url}', Secret: '{secret[:10]}...' (length={len(secret)})")
-
-    if url and secret:
-        print("※ここだよ！ APIから設定を取得します")
+    if custom_config.get("manager-api", {}).get("url"):
         config = get_config_from_api(custom_config)
     else:
-        print("※ここだよ！ ローカル設定をマージします")
         # 合并配置
         config = merge_configs(default_config, custom_config)
     # 初始化目录

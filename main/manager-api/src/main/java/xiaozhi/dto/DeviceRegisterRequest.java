@@ -25,3 +25,4 @@ public class DeviceRegisterRequest {
     public String getProvisionKey() { return provisionKey; }
     public void setProvisionKey(String provisionKey) { this.provisionKey = provisionKey; }
 }
+

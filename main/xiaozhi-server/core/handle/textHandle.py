@@ -25,74 +25,22 @@ async def handleTextMessage(conn, message):
             await handleHelloMessage(conn, msg_json)
         elif msg_json["type"] == "abort":
             conn.logger.bind(tag=TAG).info(f"收到abort消息：{message}")
-            await handleAbortMessage(conn, source="client_msg")
+            await handleAbortMessage(conn)
         elif msg_json["type"] == "listen":
             conn.logger.bind(tag=TAG).info(f"收到listen消息：{message}")
-            # While speaking: allow stop (to end speech), ignore start only
-            if getattr(conn, "client_is_speaking", False):
-                if msg_json.get("state") == "stop":
-                    conn.logger.bind(tag=TAG).info("Allow listen stop while speaking=True")
-                else:
-                    conn.logger.bind(tag=TAG).info("Ignore listen start while speaking=True")
-                    return
             if "mode" in msg_json:
                 conn.client_listen_mode = msg_json["mode"]
                 conn.logger.bind(tag=TAG).debug(
                     f"客户端拾音模式：{conn.client_listen_mode}"
                 )
             if msg_json["state"] == "start":
-                # Start new utterance window for tracing
-                try:
-                    conn.utt_seq += 1
-                    conn.rx_frames_since_listen = 0
-                    conn.rx_bytes_since_listen = 0
-                    conn._stop_cause = None
-                    conn.logger.bind(tag=TAG).info(
-                        f"※ここを見せて※ [AUDIO_TRACE] UTT#{conn.utt_seq} start: mode={conn.client_listen_mode} ※ここを見せて※"
-                    )
-                except Exception:
-                    pass
-                # Initialize listen window; let VAD set have_voice when true voice arrives
-                conn.client_have_voice = False
+                conn.client_have_voice = True
                 conn.client_voice_stop = False
-                try:
-                    conn.asr_audio.clear()
-                except Exception:
-                    pass
-                # Clear VAD-related buffers/windows
-                try:
-                    conn.client_voice_window.clear()
-                except Exception:
-                    pass
-                try:
-                    conn.client_audio_buffer = bytearray()
-                except Exception:
-                    pass
-                # Reset last activity; VAD will update when voice appears
-                conn.last_activity_time = 0.0
             elif msg_json["state"] == "stop":
                 conn.client_have_voice = True
-                # Trace manual stop
-                try:
-                    conn._stop_cause = "manual"
-                    conn.logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} client_voice_stop set by textHandle:manual last_activity_ms={int(time.time()*1000 - conn.last_activity_time) if conn.last_activity_time else 0}"
-                    )
-                except Exception:
-                    pass
                 conn.client_voice_stop = True
-                try:
-                    conn._stop_cause = "manual"
-                except Exception:
-                    pass
-                # 多重フラッシュ抑止（300ms以内の連続stopを無視）
-                now_t = time.time()
-                last_t = getattr(conn, "_last_stop_flush", 0.0)
-                if now_t - last_t < 0.3:
-                    return
-                conn._last_stop_flush = now_t
-                # 空フレームは積まない。flush評価のためにハンドラを一度起動
-                await handleAudioMessage(conn, b"")
+                if len(conn.asr_audio) > 0:
+                    await handleAudioMessage(conn, b"")
             elif msg_json["state"] == "detect":
                 conn.client_have_voice = False
                 conn.asr_audio.clear()
@@ -200,15 +148,6 @@ async def handleTextMessage(conn, message):
             # 重启服务器
             elif msg_json["action"] == "restart":
                 await conn.handle_restart(msg_json)
-        elif msg_json["type"] == "audio" and "data" in msg_json:
-            # 互換: テキストJSONに音声(base64)が来る場合もASRへ流す
-            try:
-                import base64
-                audio_bytes = base64.b64decode(msg_json["data"]) if msg_json["data"] else b""
-                conn.last_activity_time = time.time() * 1000
-                await handleAudioMessage(conn, audio_bytes)
-            except Exception as e:
-                conn.logger.bind(tag=TAG).error(f"audio JSON処理失敗: {e}")
         else:
             conn.logger.bind(tag=TAG).error(f"收到未知类型消息：{message}")
     except json.JSONDecodeError:

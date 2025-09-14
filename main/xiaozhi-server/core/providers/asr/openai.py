@@ -14,9 +14,6 @@ class ASRProvider(ASRProviderBase):
     def __init__(self, config: dict, delete_audio_file: bool):
         self.interface_type = InterfaceType.NON_STREAM
         self.api_key = config.get("api_key")
-        # 环境变量回退：当配置里是 "${OPENAI_API_KEY}" 或为空时，使用环境变量
-        if not self.api_key or (isinstance(self.api_key, str) and self.api_key.strip().startswith("${")):
-            self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.api_url = config.get("base_url")
         self.model = config.get("model_name")        
         self.output_dir = config.get("output_dir")
@@ -42,19 +39,10 @@ class ASRProvider(ASRProviderBase):
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
             }
-            # Support project/organization headers for sk-proj keys
-            project_id = os.getenv("OPENAI_PROJECT", "").strip()
-            if project_id:
-                headers["OpenAI-Project"] = project_id
-            org_id = os.getenv("OPENAI_ORG", "").strip()
-            if org_id:
-                headers["OpenAI-Organization"] = org_id
             
-            # 使用data参数传递模型名称（固定日本語）
+            # 使用data参数传递模型名称
             data = {
-                "model": self.model,
-                "language": "ja",
-                "temperature": 0,
+                "model": self.model
             }
 
 
@@ -70,15 +58,12 @@ class ASRProvider(ASRProviderBase):
                     data=data,
                     headers=headers
                 )
-                elapsed = time.time() - start_time
-                body_preview = response.text[:300] if isinstance(response.text, str) else str(response.text)[:300]
-                logger.bind(tag=TAG).info(
-                    f"ASR HTTP {response.status_code} in {elapsed:.3f}s | preview={body_preview}"
+                logger.bind(tag=TAG).debug(
+                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {response.text}"
                 )
 
             if response.status_code == 200:
                 text = response.json().get("text", "")
-                logger.bind(tag=TAG).info(f"ASR text='{text}'")
                 return text, file_path
             else:
                 raise Exception(f"API请求失败: {response.status_code} - {response.text}")

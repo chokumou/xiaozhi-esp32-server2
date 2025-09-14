@@ -17,9 +17,17 @@ public class OTACheckResponse {
     
     @JsonProperty("checksum")
     private String checksum;
+    
+    @JsonProperty("protocol")
+    private String protocol;
+    
+    @JsonProperty("websocket")
+    private WebSocketConfig websocket;
 
     public OTACheckResponse(boolean updateAvailable) {
         this.updateAvailable = updateAvailable;
+        this.protocol = "websocket";
+        this.websocket = new WebSocketConfig();
     }
 
     public OTACheckResponse(boolean updateAvailable, String latestVersion, String downloadUrl, Long fileSize, String checksum) {
@@ -28,6 +36,8 @@ public class OTACheckResponse {
         this.downloadUrl = downloadUrl;
         this.fileSize = fileSize;
         this.checksum = checksum;
+        this.protocol = "websocket";
+        this.websocket = new WebSocketConfig();
     }
 
     // Getters and setters
@@ -41,4 +51,9 @@ public class OTACheckResponse {
     public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
     public String getChecksum() { return checksum; }
     public void setChecksum(String checksum) { this.checksum = checksum; }
+    public String getProtocol() { return protocol; }
+    public void setProtocol(String protocol) { this.protocol = protocol; }
+    public WebSocketConfig getWebsocket() { return websocket; }
+    public void setWebsocket(WebSocketConfig websocket) { this.websocket = websocket; }
 }
+

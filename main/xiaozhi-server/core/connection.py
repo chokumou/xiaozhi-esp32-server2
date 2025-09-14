@@ -101,8 +101,6 @@ class ConnectionHandler:
 
         # 依赖的组件
         self.vad = None
-        # public accessor used by receiveAudioHandle etc.
-        self.vad_provider = None
         self.asr = None
         self.tts = None
         self._asr = _asr
@@ -121,22 +119,12 @@ class ConnectionHandler:
         self.client_voice_stop = False
         self.client_voice_window = deque(maxlen=5)
         self.last_is_voice = False
-        # VAD runtime counters
-        self.vad_consecutive_silence = 0
-        self.vad_recent_voice_frames = 0
-        # wake guard timestamp (ms)
-        self.wake_until = 0
 
         # asr相关变量
         # 因为实际部署时可能会用到公共的本地ASR，不能把变量暴露给公共ASR
         # 所以涉及到ASR的变量，需要在这里定义，属于connection的私有变量
         self.asr_audio = []
         self.asr_audio_queue = queue.Queue()
-        # 在ASR未就绪期间的临时音频缓冲
-        self.pending_audio_frames = []
-        # 简易统计：接收的音频帧与字节数
-        self._rx_frame_count = 0
-        self._rx_bytes_total = 0
 
         # llm相关变量
         self.llm_finish_task = True
@@ -173,83 +161,29 @@ class ConnectionHandler:
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(config, self.logger)
 
-        # Debugging/Tracing helpers
-        self.utt_seq = 0  # Incremented on listen start
-        # ingress tracing
-        self._ingress_seen = set()
-        self.rx_frames_since_listen = 0
-        self.rx_bytes_since_listen = 0
-        self._stop_cause = None  # 'manual' or 'vad:<reason>'
-        # Additional debugging fields
-        self.debug_last_stop_set_by = None
-
-        # --- Ensure vad_provider initialized immediately (fallback to WebRTC) ---
-        try:
-            from core.providers.vad.webrtc import VADProvider as WebrtcVAD
-            try:
-                # prefer module-specific config if present
-                vad_conf = self.config.get("VAD", {}).get("WebRTCVAD", {})
-            except Exception:
-                vad_conf = self.config.get("VAD", {}) or {}
-            try:
-                self.vad_provider = WebrtcVAD(vad_conf)
-            except Exception:
-                # if instantiation fails, leave vad_provider to be set later
-                self.vad_provider = getattr(self, 'vad', None)
-
-            try:
-                import subprocess
-                sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-            except Exception:
-                sha = "unknown"
-            try:
-                self.logger.bind(tag=TAG).info(f"[BOOT] COMMIT={sha} VAD_IMPL={type(self.vad_provider).__name__ if self.vad_provider is not None else 'None'}")
-            except Exception:
-                pass
-        except Exception:
-            # keep moving; _initialize_components will try to set vad later
-            self.vad_provider = getattr(self, 'vad', None)
-        # ---------------------------------------------------------------------
-
     async def handle_connection(self, ws):
         try:
-            # 获取并验证headers（大小写不敏感，统一为小写键）
-            try:
-                self.headers = {k.lower(): v for k, v in ws.request.headers.items()}
-            except Exception:
-                self.headers = dict(ws.request.headers)
+            # 获取并验证headers
+            self.headers = dict(ws.request.headers)
 
             if self.headers.get("device-id", None) is None:
                 # 尝试从 URL 的查询参数中获取 device-id
                 from urllib.parse import parse_qs, urlparse
 
-                request_path = getattr(ws.request, "path", "") or getattr(ws.request, "path_qs", "")
-                device_id = None
-                client_id = None
-                if request_path:
-                    parsed_url = urlparse(request_path)
-                    query_params = parse_qs(parsed_url.query)
-                    device_id = (query_params.get("device-id") or [None])[0]
-                    client_id = (query_params.get("client-id") or [None])[0]
-                    # 支持本地测试快速跳过认证的查询参数
-                    local_test_flag = (query_params.get("local_test") or [None])[0]
-                    # token_param from query string (kept for compatibility but not used in prod)
-                    token_param = (query_params.get("token") or [None])[0]
-
-
-                # 如果仍然没有，放宽校验，自动生成ID，避免立即断开
-                if device_id is None:
-                    device_id = f"unknown-{uuid.uuid4().hex[:8]}"
-                if client_id is None:
-                    client_id = device_id
-
-                self.headers["device-id"] = device_id
-                self.headers["client-id"] = client_id
-                if local_test_flag is not None:
-                    # keep header but do not bypass auth in prod
-                    self.headers["local-test"] = local_test_flag
-                # note: token_param is parsed but will not be used to bypass auth in production
-                self.logger.bind(tag=TAG).info(f"缺少device-id，已自动分配: {device_id}")
+                # 从 WebSocket 请求中获取路径
+                request_path = ws.request.path
+                if not request_path:
+                    self.logger.bind(tag=TAG).error("无法获取请求路径")
+                    return
+                parsed_url = urlparse(request_path)
+                query_params = parse_qs(parsed_url.query)
+                if "device-id" in query_params:
+                    self.headers["device-id"] = query_params["device-id"][0]
+                    self.headers["client-id"] = query_params["client-id"][0]
+                else:
+                    await ws.send("端口正常，如需测试连接，请使用test_page.html")
+                    await self.close(ws)
+                    return
             real_ip = self.headers.get("x-real-ip") or self.headers.get(
                 "x-forwarded-for"
             )
@@ -261,16 +195,8 @@ class ConnectionHandler:
                 f"{self.client_ip} conn - Headers: {self.headers}"
             )
 
-            # 进行认证（增强：如果认证抛出异常但本地测试标记或 env 打开，则跳过）
-            try:
-                await self.auth.authenticate(self.headers)
-            except AuthenticationError as e:
-                # 如果连接携带 local-test 或者进程环境允许本地测试，则放行
-                local_test_header = self.headers.get("local-test")
-                if local_test_header in ("1", "true", "True") or os.getenv("LOCAL_TEST_DISABLE_AUTH", "0") in ("1", "true", "True"):
-                    self.logger.bind(tag=TAG).warning(f"Authentication failed but local-test enabled, continuing: {e}")
-                else:
-                    raise
+            # 进行认证
+            await self.auth.authenticate(self.headers)
 
             # 认证通过,继续处理
             self.websocket = ws
@@ -287,12 +213,6 @@ class ConnectionHandler:
 
             # 获取差异化配置
             self._initialize_private_config()
-            # ensure ingress fields exist
-            try:
-                if not hasattr(self, '_ingress_seen'):
-                    self._ingress_seen = set()
-            except Exception:
-                pass
             # 异步初始化
             self.executor.submit(self._initialize_components)
 
@@ -361,51 +281,11 @@ class ConnectionHandler:
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
-            # ASR未就绪：先暂存，待就绪后补投递
-            if self.asr is None:
-                self.pending_audio_frames.append(message)
+            if self.vad is None:
                 return
-            # 如有积压，先补投递
-            if self.pending_audio_frames:
-                for _frm in self.pending_audio_frames:
-                    self.asr_audio_queue.put(_frm)
-                self.pending_audio_frames.clear()
-            # Drop very small packets (likely Opus DTX / keepalive)
-            try:
-                dtx_threshold = int(os.getenv("DTX_THRESHOLD", "12"))
-                if len(message) <= dtx_threshold:
-                    self.logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] SKIP_TINY_PACKET UTT#{self.utt_seq} bytes={len(message)} (likely DTX/keepalive) threshold={dtx_threshold}"
-                    )
-                    return
-            except Exception:
-                pass
-
-            # 正常投递当前帧
-            self._rx_frame_count += 1
-            self._rx_bytes_total += len(message)
-            # Per-listen counters
-            try:
-                self.rx_frames_since_listen += 1
-                self.rx_bytes_since_listen += len(message)
-                if (self.rx_frames_since_listen % 50) == 0:
-                    self.logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] UTT#{self.utt_seq} recv frames={self.rx_frames_since_listen}, bytes={self.rx_bytes_since_listen}"
-                    )
-            except Exception:
-                pass
-            if (self._rx_frame_count % 25) == 0:
-                self.logger.bind(tag=TAG).info(
-                    f"音频帧接收统计: {self._rx_frame_count} 帧, {self._rx_bytes_total} 字节"
-                )
+            if self.asr is None:
+                return
             self.asr_audio_queue.put(message)
-            try:
-                # ※ここを送って※: connection-level audio counters
-                self.logger.bind(tag=TAG).info(
-                    f"※ここを送って※ [AUDIO_STATS] total_rx_frames={self._rx_frame_count} total_rx_bytes={self._rx_bytes_total} rx_frames_since_listen={getattr(self,'rx_frames_since_listen',0)} rx_bytes_since_listen={getattr(self,'rx_bytes_since_listen',0)} asr_audio_queue_size={self.asr_audio_queue.qsize()}"
-                )
-            except Exception:
-                pass
 
     async def handle_restart(self, message):
         """处理服务器重启请求"""
@@ -502,8 +382,7 @@ class ConnectionHandler:
             self._init_prompt_enhancement()
 
         except Exception as e:
-            stack = traceback.format_exc()
-            self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}; stack=\n{stack}")
+            self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
 
     def _init_prompt_enhancement(self):
         # 更新上下文信息
@@ -540,23 +419,17 @@ class ConnectionHandler:
         return tts
 
     def _initialize_asr(self):
-        """初始化ASR（容错：当传入的公共ASR为空时，自动实例化）"""
-        try:
-            if self._asr is None:
-                # 公共ASR还未就绪，按配置即时实例化一个
-                self.logger.bind(tag=TAG).info("公共ASR未预初始化，正在即时实例化...")
-                asr = initialize_asr(self.config)
-                return asr
+        """初始化ASR"""
+        if self._asr.interface_type == InterfaceType.LOCAL:
+            # 如果公共ASR是本地服务，则直接返回
+            # 因为本地一个实例ASR，可以被多个连接共享
+            asr = self._asr
+        else:
+            # 如果公共ASR是远程服务，则初始化一个新实例
+            # 因为远程ASR，涉及到websocket连接和接收线程，需要每个连接一个实例
+            asr = initialize_asr(self.config)
 
-            if getattr(self._asr, "interface_type", None) == InterfaceType.LOCAL:
-                # 本地单例ASR可复用
-                return self._asr
-            else:
-                # 远程ASR需要每连接一个实例
-                return initialize_asr(self.config)
-        except Exception as e:
-            self.logger.bind(tag=TAG).error(f"初始化ASR失败: {e}")
-            return None
+        return asr
 
     def _initialize_voiceprint(self):
         """为当前连接初始化声纹识别"""
@@ -686,30 +559,6 @@ class ConnectionHandler:
             self.tts = modules["tts"]
         if modules.get("vad", None) is not None:
             self.vad = modules["vad"]
-        # Ensure a stable vad_provider reference is available on the connection
-        try:
-            if getattr(self, 'vad', None) is not None:
-                self.vad_provider = self.vad
-            else:
-                # Fallback: try to instantiate a default webrtc provider
-                try:
-                    from core.providers.vad.webrtc import VADProvider as WebrtcVAD
-
-                    try:
-                        vad_conf = self.config.get("VAD", {})
-                    except Exception:
-                        vad_conf = {}
-                    self.vad_provider = WebrtcVAD(vad_conf)
-                except Exception:
-                    self.vad_provider = None
-
-            try:
-                self.logger.bind(tag=TAG).info(f"[BOOT] VAD_IMPL={type(self.vad_provider).__name__ if self.vad_provider is not None else 'None'}")
-            except Exception:
-                pass
-        except Exception:
-            # keep going but leave vad_provider as None
-            self.vad_provider = None
         if modules.get("asr", None) is not None:
             self.asr = modules["asr"]
         if modules.get("llm", None) is not None:
@@ -723,18 +572,11 @@ class ConnectionHandler:
         if self.memory is None:
             return
         """初始化记忆模块"""
-        
-        # QUICK_SAVE設定をチェック：0=ローカルファイル保存、1=API保存
-        quick_save = self.config.get("QUICK_SAVE", "0")
-        use_local_file = quick_save == "0"
-        
-        self.logger.bind(tag=TAG).info(f"※ここだよ！ メモリー初期化: QUICK_SAVE={quick_save}, save_to_file={use_local_file}")
-        
         self.memory.init_memory(
             role_id=self.device_id,
             llm=self.llm,
             summary_memory=self.config.get("summaryMemory", None),
-            save_to_file=use_local_file,
+            save_to_file=not self.read_config_from_api,
         )
 
         # 获取记忆总结配置
@@ -1078,7 +920,7 @@ class ConnectionHandler:
 
     def clearSpeakStatus(self):
         self.client_is_speaking = False
-        self.logger.bind(tag=TAG).info("Set speaking=False by clearSpeakStatus")
+        self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
 
     async def close(self, ws=None):
         """资源清理方法"""
@@ -1191,47 +1033,10 @@ class ConnectionHandler:
             )
 
     def reset_vad_states(self):
-        # Clear audio buffer and voice flags
         self.client_audio_buffer = bytearray()
         self.client_have_voice = False
         self.client_voice_stop = False
-        # Clear VAD counters and timers to avoid stale state across turns
-        try:
-            if hasattr(self, 'vad_consecutive_silence'):
-                self.vad_consecutive_silence = 0
-            if hasattr(self, 'vad_recent_voice_frames'):
-                self.vad_recent_voice_frames = 0
-            if hasattr(self, 'silence_count'):
-                self.silence_count = 0
-            # clear last voice timestamp
-            if hasattr(self, 'last_voice_ms'):
-                self.last_voice_ms = None
-            # clear rms accumulator/buffer used by RMS gate
-            if hasattr(self, '_rms_acc'):
-                try:
-                    delattr = setattr
-                    delattr(self, '_rms_acc', 0.0)
-                except Exception:
-                    self._rms_acc = 0.0
-            if hasattr(self, '_rms_buf'):
-                try:
-                    self._rms_buf = bytearray()
-                except Exception:
-                    pass
-            # cancel pending voice end task if any
-            try:
-                if hasattr(self, '_voice_end_task') and self._voice_end_task and not self._voice_end_task.done():
-                    self._voice_end_task.cancel()
-            except Exception:
-                pass
-            # clear in-voice active flag
-            try:
-                if hasattr(self, '_in_voice_active'):
-                    self._in_voice_active = False
-            except Exception:
-                pass
-        except Exception:
-            pass
+        self.logger.bind(tag=TAG).debug("VAD states reset.")
 
     def chat_and_close(self, text):
         """Chat with the user and then close the connection"""

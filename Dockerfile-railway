@@ -6,44 +6,34 @@ WORKDIR /opt/xiaozhi-esp32-server
 # システム依存関係のインストール
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    python3-dev \
-    libssl-dev \
-    libffi-dev \
-    pkg-config \
-    rustc \
     libopus0 \
     ffmpeg \
-    curl \
+    wget \
     unzip \
-    git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Python依存関係のインストール
-# For Railway we use a trimmed requirements file to avoid large ML packages
-COPY main/xiaozhi-server/requirements.railway.txt ./requirements.txt
+COPY main/xiaozhi-server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリケーションコードのコピー
 COPY main/xiaozhi-server .
 
-# 必要なディレクトリの作成と基本設定
-RUN mkdir -p tmp data /opt/models/sherpa_sense_voice && \
-    cp -f config_railway.yaml config.yaml
+# 必要なディレクトリの作成
+RUN mkdir -p tmp data models
 
-# Copy entrypoint script and make executable
-COPY main/xiaozhi-server/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# 音声認識モデルのダウンロード（FunASR）
+RUN wget -O models/SenseVoiceSmall.zip "https://isv-data.oss-cn-hangzhou.aliyuncs.com/ics/MaaS/ASR/models/SenseVoice/SenseVoiceSmall.zip" && \
+    cd models && \
+    unzip SenseVoiceSmall.zip && \
+    rm SenseVoiceSmall.zip
 
-## 以前は起動時にエントリポイントでモデルを取得していたが、
-## 現在はクラウドASR/LLM/TTSを使用するため不要
-
-# Railway用の設定ファイルは上でコピー済み
+# Railway用の設定ファイルをコピー
+COPY main/xiaozhi-server/config_railway.yaml config.yaml
 
 # ポート8000を公開
 EXPOSE 8000
 
 # アプリケーション起動
-ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "app.py"]

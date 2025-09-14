@@ -3,8 +3,6 @@ import uuid
 import signal
 import asyncio
 from aioconsole import ainput
-import os
-import yaml
 from config.settings import load_config
 from config.logger import setup_logging
 from core.utils.util import get_local_ip, validate_mcp_endpoint
@@ -14,82 +12,6 @@ from core.utils.util import check_ffmpeg_installed
 
 TAG = __name__
 logger = setup_logging()
-
-
-def ensure_runtime_config():
-    """Railway環境で設定ファイルが無い場合、環境変数から生成"""
-    import os
-    
-    # 現在の作業ディレクトリを確認
-    current_dir = os.getcwd()
-    logger.bind(tag=TAG).info(f"※ここだよ！ 現在の作業ディレクトリ: {current_dir}")
-    
-    # 複数の候補パスを試す
-    candidate_paths = [
-        "/opt/xiaozhi-esp32-server/data/.config.yaml",
-        f"{current_dir}/data/.config.yaml",
-        f"{os.path.dirname(current_dir)}/data/.config.yaml"
-    ]
-    
-    for config_path in candidate_paths:
-        logger.bind(tag=TAG).info(f"※ここだよ！ 候補パス確認: {config_path}")
-        
-        # ディレクトリ作成
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        
-        # 設定ファイルが存在しない、かつ環境変数が設定されている場合のみ生成
-        if not os.path.exists(config_path):
-            manager_api_url = os.getenv("MANAGER_API_URL", "")
-            manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
-            memory_module = os.getenv("MEMORY_MODULE", "nomem")
-            quick_save = os.getenv("QUICK_SAVE", "0")
-            
-            logger.bind(tag=TAG).info(f"※ここだよ！ 環境変数から設定ファイル生成: {config_path}")
-            logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_URL: '{manager_api_url}'")
-            logger.bind(tag=TAG).info(f"※ここだよ！ MANAGER_API_SECRET: '{manager_api_secret[:10]}...' (length={len(manager_api_secret)})")
-            logger.bind(tag=TAG).info(f"※ここだよ！ MEMORY_MODULE: '{memory_module}'")
-            logger.bind(tag=TAG).info(f"※ここだよ！ QUICK_SAVE: '{quick_save}'")
-            
-            if manager_api_url and manager_api_secret:
-                config_data = {
-                    "manager-api": {
-                        "url": manager_api_url,
-                        "secret": manager_api_secret
-                    },
-                    "selected_module": {
-                        "Memory": memory_module
-                    },
-                    "QUICK_SAVE": quick_save
-                }
-                
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True)
-                    f.flush()  # 強制的にディスクに書き込み
-                    os.fsync(f.fileno())  # システムレベルでの同期
-                
-                # 書き込み確認
-                if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        verify_content = f.read()
-                    logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル生成完了: {config_path}")
-                    logger.bind(tag=TAG).info(f"※ここだよ！ 書き込み確認成功: {len(verify_content)}文字")
-                else:
-                    logger.bind(tag=TAG).error(f"※ここだよ！ 設定ファイル書き込み失敗: {config_path}")
-                
-                # キャッシュをクリアして再読み込みを強制
-                try:
-                    from core.utils.cache.manager import cache_manager, CacheType
-                    cache_manager.clear(CacheType.CONFIG, "main_config")
-                    logger.bind(tag=TAG).info("※ここだよ！ 設定キャッシュをクリア")
-                except Exception as e:
-                    logger.bind(tag=TAG).warning(f"※ここだよ！ キャッシュクリア失敗: {e}")
-                
-                return  # 成功したら終了
-            else:
-                logger.bind(tag=TAG).warning("※ここだよ！ 環境変数不足のため設定ファイル生成をスキップ")
-        else:
-            logger.bind(tag=TAG).info(f"※ここだよ！ 設定ファイル既存: {config_path}")
-            return  # 既存ファイルがあれば終了
 
 
 async def wait_for_exit() -> None:
@@ -122,77 +44,7 @@ async def monitor_stdin():
 
 async def main():
     check_ffmpeg_installed()
-    
-    # Railway環境用の設定ファイル生成
-    ensure_runtime_config()
-    
-    # 設定ファイルが消失する問題の回避策：実行時に直接設定を注入
     config = load_config()
-    
-    # manager-api設定が読み込まれていない場合、環境変数から直接注入
-    if not config.get("manager-api"):
-        manager_api_url = os.getenv("MANAGER_API_URL", "")
-        manager_api_secret = os.getenv("MANAGER_API_SECRET", "")
-        memory_module = os.getenv("MEMORY_MODULE", "nomem")
-        quick_save = os.getenv("QUICK_SAVE", "0")
-        
-        if manager_api_url and manager_api_secret:
-            logger.bind(tag=TAG).warning("※ここだよ！ 設定ファイル問題を検出、実行時注入を実行")
-            
-            # 実行時に設定を直接注入
-            config["manager-api"] = {
-                "url": manager_api_url,
-                "secret": manager_api_secret
-            }
-            config["selected_module"]["Memory"] = memory_module
-            
-            # 認証問題の一時回避：QUICK_SAVE=0でローカルファイルモードに強制切り替え
-            logger.bind(tag=TAG).warning("※ここだよ！ 認証問題対策でローカルメモリーモードを強制有効化")
-            config["QUICK_SAVE"] = "0"  # ローカルファイル保存を強制
-            os.environ["QUICK_SAVE"] = "0"  # 環境変数も更新してASRのQUICK_SAVE機能を無効化
-            
-            # 古いメモリーファイルをクリーンアップ（一回だけ実行）
-            try:
-                memory_file = "/opt/xiaozhi-esp32-server/data/.memory.yaml"
-                if os.path.exists(memory_file):
-                    os.remove(memory_file)
-                    logger.bind(tag=TAG).info("※ここだよ！ 古いメモリーファイルを削除してクリーンスタート")
-            except Exception as e:
-                logger.bind(tag=TAG).warning(f"※ここだよ！ メモリーファイル削除失敗: {e}")
-            
-            logger.bind(tag=TAG).info("※ここだよ！ 実行時設定注入完了")
-            logger.bind(tag=TAG).info(f"※ここだよ！ 注入後manager-api設定: {config.get('manager-api')}")
-        else:
-            logger.bind(tag=TAG).error("※ここだよ！ 環境変数も取得できません")
-    
-    # ManageApiClient初期化
-    try:
-        from config.manage_api_client import ManageApiClient
-        manager_api_config = config.get("manager-api")
-        logger.bind(tag=TAG).info(f"※ここだよ！ config全体: {list(config.keys())}")
-        logger.bind(tag=TAG).info(f"※ここだよ！ manager-api設定: {manager_api_config}")
-        
-        if manager_api_config:
-            api_client = ManageApiClient(config)
-            logger.bind(tag=TAG).info("※ここだよ！ ManageApiClient初期化成功")
-        else:
-            logger.bind(tag=TAG).warning("※ここだよ！ manager-api設定が見つかりません")
-    except Exception as e:
-        logger.bind(tag=TAG).error(f"※ここだよ！ ManageApiClient初期化失敗: {e}")
-        import traceback
-        logger.bind(tag=TAG).error(f"※ここだよ！ ManageApiClient初期化失敗詳細: {traceback.format_exc()}")
-
-    # Railway 環境では単一ポート($PORT)のみ公開されるため、WebSocketサーバーをそのポートで起動し、
-    # HTTPヘルスチェック/OTAはwebsocketsのprocess_requestで応答する。
-    railway_project_id = os.getenv("RAILWAY_PROJECT_ID")
-    railway_env = os.getenv("RAILWAY_ENVIRONMENT")
-    on_railway = bool(railway_project_id or railway_env)
-    if on_railway:
-        port_env = int(os.getenv("PORT", config.get("server", {}).get("port", 8000)))
-        config.setdefault("server", {})
-        config["server"]["port"] = port_env
-        # http_portは使用しない（同一ポート重複バインドを避ける）
-        config["server"]["http_port"] = port_env
 
     # 默认使用manager-api的secret作为auth_key
     # 如果secret为空，则生成随机密钥
@@ -205,32 +57,26 @@ async def main():
     # 添加 stdin 监控任务
     stdin_task = asyncio.create_task(monitor_stdin())
 
-    # RailwayではHTTP+WSを同一ポートのSimpleHttpServerで提供
-    ws_task = None
-    ota_task = None
-    if on_railway:
-        server = SimpleHttpServer(config)
-        ota_task = asyncio.create_task(server.start())
-    else:
-        # ローカルは従来どおり別プロセス
-        ws_server = WebSocketServer(config)
-        ws_task = asyncio.create_task(ws_server.start())
-        ota_server = SimpleHttpServer(config)
-        ota_task = asyncio.create_task(ota_server.start())
+    # 启动 WebSocket 服务器
+    ws_server = WebSocketServer(config)
+    ws_task = asyncio.create_task(ws_server.start())
+    # 启动 Simple http 服务器
+    ota_server = SimpleHttpServer(config)
+    ota_task = asyncio.create_task(ota_server.start())
 
     read_config_from_api = config.get("read_config_from_api", False)
     port = int(config["server"].get("http_port", 8003))
-    if not read_config_from_api and not on_railway:
+    if not read_config_from_api:
         logger.bind(tag=TAG).info(
             "OTA接口是\t\thttp://{}:{}/xiaozhi/ota/",
             get_local_ip(),
             port,
         )
-        logger.bind(tag=TAG).info(
-            "视觉分析接口是\thttp://{}:{}/mcp/vision/explain",
-            get_local_ip(),
-            port,
-        )
+    logger.bind(tag=TAG).info(
+        "视觉分析接口是\thttp://{}:{}/mcp/vision/explain",
+        get_local_ip(),
+        port,
+    )
     mcp_endpoint = config.get("mcp_endpoint", None)
     if mcp_endpoint is not None and "你" not in mcp_endpoint:
         # 校验MCP接入点格式

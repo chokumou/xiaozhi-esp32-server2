@@ -12,3 +12,4 @@ public interface FirmwareRepository extends JpaRepository<Firmware, Long> {
     
     Optional<Firmware> findByDeviceTypeAndVersion(String deviceType, String version);
 }
+

@@ -9,3 +9,4 @@ public class ManagerApiApplication {
         SpringApplication.run(ManagerApiApplication.class, args);
     }
 }
+

@@ -16,3 +16,4 @@ public interface DeviceRepository extends JpaRepository<Device, String> {
     @Query("SELECT d FROM Device d WHERE d.lastHeartbeat < :cutoffTime")
     java.util.List<Device> findOfflineDevices(java.time.LocalDateTime cutoffTime);
 }
+

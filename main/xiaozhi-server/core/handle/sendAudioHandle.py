@@ -1,16 +1,11 @@
 import json
-import time
 from core.providers.tts.dto.dto import SentenceType
 from core.utils import textUtils
-from config.logger import setup_logging
 
 TAG = __name__
-logger = setup_logging()
 
 
 async def sendAudioMessage(conn, sentenceType, audios, text):
-    logger.bind(tag=TAG).info(f"※ここだよ！ sendAudioMessage呼び出し sentenceType={sentenceType}, text='{text}', audios_type={type(audios)}, audios_len={len(audios) if hasattr(audios, '__len__') else 'N/A'}")
-    
     if conn.tts.tts_audio_first_sentence:
         conn.logger.bind(tag=TAG).info(f"发送第一段语音: {text}")
         conn.tts.tts_audio_first_sentence = False
@@ -35,21 +30,10 @@ async def sendAudioMessage(conn, sentenceType, audios, text):
 # 播放音频
 async def sendAudio(conn, audios):
     if audios is None:
-        logger.bind(tag=TAG).warning(f"※ここだよ！ 音声データなし: audios=None")
         return
     # 如果audios不是opus数组，则不需要进行遍历，可以直接发送;这里需要进行流控管理，防止发送过快引发客户端溢出
     if isinstance(audios, bytes):
-        logger.bind(tag=TAG).info(f"※ここだよ！ WebSocket音声送信開始 bytes={len(audios)}")
-        try:
-            if hasattr(conn, 'websocket') and conn.websocket:
-                await conn.websocket.send(audios)
-                logger.bind(tag=TAG).info(f"※ここだよ！ WebSocket音声送信完了 bytes={len(audios)}")
-            else:
-                logger.bind(tag=TAG).error(f"※ここだよ！ WebSocket未接続: conn.websocket={getattr(conn, 'websocket', None)}")
-        except Exception as e:
-            logger.bind(tag=TAG).error(f"※ここだよ！ WebSocket音声送信エラー: {e}")
-    else:
-        logger.bind(tag=TAG).warning(f"※ここだよ！ 予期しない音声データ形式: type={type(audios)}, len={len(audios) if hasattr(audios, '__len__') else 'N/A'}")
+        await conn.websocket.send(audios)
 
 
 async def send_tts_message(conn, state, text=None):
@@ -72,21 +56,6 @@ async def send_tts_message(conn, state, text=None):
             await sendAudio(conn, audios)
         # 清除服务端讲话状态
         conn.clearSpeakStatus()
-        # 解除发话保護期間
-        try:
-            conn.speak_lock_until = 0.0
-        except Exception:
-            pass
-    elif state == "start":
-        # TTS開始から短時間は誤検知での打断を無視するためのロックを張る
-        try:
-            lock_ms = int(conn.config.get("tts_start_lock_ms", 1200))
-        except Exception:
-            lock_ms = 1200
-        conn.speak_lock_until = time.time() + (lock_ms / 1000.0)
-        conn.logger.bind(tag=TAG).info(
-            f"TTS start: speaking guard enabled for {lock_ms}ms (until {conn.speak_lock_until:.3f})"
-        )
 
     # 发送消息到客户端
     await conn.websocket.send(json.dumps(message))
@@ -119,5 +88,4 @@ async def send_stt_message(conn, text):
         json.dumps({"type": "stt", "text": stt_text, "session_id": conn.session_id})
     )
     conn.client_is_speaking = True
-    conn.logger.bind(tag=TAG).info("Set speaking=True by STT message")
     await send_tts_message(conn, "start")

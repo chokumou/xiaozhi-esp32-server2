@@ -63,19 +63,7 @@ class ManageApiClient:
     def _request(cls, method: str, endpoint: str, **kwargs) -> Dict:
         """发送单次HTTP请求并处理响应"""
         endpoint = endpoint.lstrip("/")
-        
-        # デバッグ用ログ追加
-        print(f"※ここだよ！ API Request: {method} {cls._client.base_url}/{endpoint}")
-        print(f"※ここだよ！ Authorization Header: Bearer {cls._secret[:10]}...")
-        print(f"※ここだよ！ Request Headers: {dict(cls._client.headers)}")
-        
         response = cls._client.request(method, endpoint, **kwargs)
-        
-        print(f"※ここだよ！ Response Status: {response.status_code}")
-        print(f"※ここだよ！ Response Headers: {dict(response.headers)}")
-        if response.status_code != 200:
-            print(f"※ここだよ！ Response Body: {response.text}")
-        
         response.raise_for_status()
 
         result = response.json()
@@ -158,80 +146,16 @@ def get_agent_models(
 
 
 def save_mem_local_short(mac_address: str, short_momery: str) -> Optional[Dict]:
-    """Save memory to nekota-server memories table"""
     try:
-        # ManageApiClient が初期化されているかチェック
-        if ManageApiClient._instance is None:
-            print("ManageApiClient not initialized, skipping memory save")
-            return None
-            
-        # nekota-server memories API に保存
         return ManageApiClient._instance._execute_request(
-            "POST",
-            f"/api/memory/",
+            "PUT",
+            f"/agent/saveMemory/" + mac_address,
             json={
-                "user_id": mac_address,  # デバイスIDをuser_idとして使用
-                "text": short_momery,
+                "summaryMemory": short_momery,
             },
         )
     except Exception as e:
-        print(f"存储短期记忆到nekota-server失败: {e}")
-        return None
-
-
-def save_mem_local_short_with_token(mac_address: str, short_momery: str, token: Optional[str] = None) -> Optional[Dict]:
-    """Save short memory to nekota-server memories table with JWT token.
-
-    If token is provided, a short-lived httpx.Client will be used with Authorization: Bearer <token>.
-    Otherwise the global ManageApiClient instance client (using server secret) is used.
-    """
-    try:
-        if token:
-            # use a temporary client with the provided token
-            tmp_client = httpx.Client(
-                base_url=ManageApiClient.config.get("url"),
-                headers={
-                    "User-Agent": f"PythonClient/2.0 (PID:{os.getpid()})",
-                    "Accept": "application/json",
-                    "Authorization": "Bearer " + token,
-                },
-                timeout=ManageApiClient.config.get("timeout", 30),
-            )
-            try:
-                # nekota-server memories API に保存
-                resp = tmp_client.request(
-                    "POST",
-                    f"/api/memory/",
-                    json={
-                        "user_id": mac_address,  # デバイスIDをuser_idとして使用
-                        "text": short_momery,
-                    },
-                )
-                resp.raise_for_status()
-                result = resp.json()
-                if result.get("status") == "ok":
-                    return result
-                else:
-                    raise Exception(f"nekota-server API error: {result.get('detail', '未知错误')}")
-            finally:
-                tmp_client.close()
-        else:
-            # ManageApiClient が初期化されているかチェック
-            if ManageApiClient._instance is None:
-                print("ManageApiClient not initialized, skipping memory save")
-                return None
-                
-            # nekota-server memories API に保存
-            return ManageApiClient._instance._execute_request(
-                "POST",
-                f"/api/memory/",
-                json={
-                    "user_id": mac_address,  # デバイスIDをuser_idとして使用
-                    "text": short_momery,
-                },
-            )
-    except Exception as e:
-        print(f"存储短期记忆到nekota-server失败: {e}")
+        print(f"存储短期记忆到服务器失败: {e}")
         return None
 
 

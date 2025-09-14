@@ -20,3 +20,4 @@ public class OTACheckRequest {
     public String getDeviceType() { return deviceType; }
     public void setDeviceType(String deviceType) { this.deviceType = deviceType; }
 }
+

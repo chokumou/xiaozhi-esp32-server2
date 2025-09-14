@@ -37,7 +37,7 @@ class ASRProviderBase(ABC):
     def asr_text_priority_thread(self, conn):
         while not conn.stop_event.is_set():
             try:
-                message = conn.asr_audio_queue.get(timeout=3)  # 1秒→3秒に延長
+                message = conn.asr_audio_queue.get(timeout=1)
                 future = asyncio.run_coroutine_threadsafe(
                     handleAudioMessage(conn, message),
                     conn.loop,
@@ -52,164 +52,24 @@ class ASRProviderBase(ABC):
                 continue
 
     # 接收音频
-    async def receive_audio(self, conn, audio, *, audio_have_voice: bool):
-        # FAILFAST: detect paths that deliver non-DTX audio without VAD
-        # FAILFAST: only active in normal VAD mode. In RMS/NO_VAD modes we bypass.
-        try:
-            try:
-                audio_trace = os.getenv('AUDIO_TRACE', '1') == '1'
-            except Exception:
-                audio_trace = True
-            use_rms = os.getenv('NO_VAD', '0') == '1' or os.getenv('USE_RMS', '0') == '1'
-            if not use_rms:
-                if os.getenv("DEBUG_FAILFAST", "1") == "1":
-                    if audio and len(audio) > 3 and not audio_have_voice and not getattr(conn, 'client_have_voice', False):
-                        traceback.print_stack(limit=5)
-                        raise RuntimeError("[FAILFAST] non-DTX arrived with have_voice=False → VAD not called on this path")
-        except Exception:
-            # Re-raise so devs can see the failure; do not swallow
-            raise
-        # BYPASS detection: if non-DTX audio keeps arriving but have_voice is False,
-        # that indicates VAD was not called on the path delivering audio.
-        audio_have_voice_flag = bool(audio_have_voice)
-        # ASR ingress visibility: only log when we actually have voice
-        try:
-            if audio_have_voice_flag:
-                est_pcm = 0
-                if conn.audio_format == "pcm":
-                    est_pcm = sum(len(x) for x in conn.asr_audio) if getattr(conn, 'asr_audio', None) is not None else 0
-                else:
-                    est_pcm = len(getattr(conn, 'asr_audio', [])) * 1920
-                logger.bind(tag=TAG).info(f"[ASR_IN] hv=True pcm_bytes={est_pcm} sr=16000 ch=1 utt={getattr(conn,'utt_seq',0)}")
-        except Exception:
-            pass
-        if audio and len(audio) > 3 and not audio_have_voice_flag and not getattr(conn, 'client_have_voice', False):
-            conn._no_vad_streak = getattr(conn, '_no_vad_streak', 0) + 1
-            if conn._no_vad_streak == 3:
-                logger.bind(tag=TAG).error("[AUDIO_TRACE] BYPASS: non-DTX x3 but have_voice_in=False → VAD not called on this path")
-                try:
-                    hv = None
-                    if getattr(conn, 'vad', None) is not None:
-                        hv = conn.vad.is_vad(conn, audio)
-                        logger.bind(tag=TAG).error(f"[AUDIO_TRACE] BYPASS_CHECK forced VAD → {hv}")
-                    else:
-                        logger.bind(tag=TAG).error("[AUDIO_TRACE] BYPASS_CHECK: conn.vad is None")
-                except Exception as e:
-                    logger.bind(tag=TAG).error(f"[AUDIO_TRACE] BYPASS_CHECK VAD error: {e}")
-        else:
-            conn._no_vad_streak = 0
+    async def receive_audio(self, conn, audio, audio_have_voice):
         if conn.client_listen_mode == "auto" or conn.client_listen_mode == "realtime":
             have_voice = audio_have_voice
         else:
             have_voice = conn.client_have_voice
         
-        if audio and len(audio) > 0:
-            # If VAD returned a dict with dtx flag, ignore those chunks entirely
-            if isinstance(audio, dict) and audio.get("dtx", False):
-                # do not append or count DTX frames
-                if audio_trace:
-                    logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] Ignored DTX chunk UTT#{getattr(conn,'utt_seq',0)}"
-                    )
-            else:
-                # append raw bytes (caller may pass pcm bytes)
-                # If caller passed a dict with pcm field, extract it
-                if isinstance(audio, dict) and audio.get("pcm"):
-                    pcm_bytes = audio.get("pcm")
-                else:
-                    pcm_bytes = audio
-                conn.asr_audio.append(pcm_bytes)
-            # Per-chunk trace: size, have_voice flag, asr_audio length and estimated PCM
-            try:
-                if conn.audio_format == "pcm":
-                    total_len_estimated_now = sum(len(x) for x in conn.asr_audio)
-                else:
-                    total_len_estimated_now = len(conn.asr_audio) * 1920
-                if audio_trace:
-                    logger.bind(tag=TAG).info(
-                        f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} recv_chunk size={len(audio)} have_voice={audio_have_voice} client_have_voice={getattr(conn,'client_have_voice',False)} asr_audio_frames={len(conn.asr_audio)} est_pcm={total_len_estimated_now}"
-                    )
-                # Auto-flush trigger: if accumulated estimated PCM exceeds threshold,
-                # set client_voice_stop so flush path runs even if VAD/stop timing missed.
-                try:
-                    min_pcm_bytes_auto = int((conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000")))
-                except Exception:
-                    min_pcm_bytes_auto = 12000
-                try:
-                    if total_len_estimated_now >= min_pcm_bytes_auto and not getattr(conn, 'client_voice_stop', False) and not getattr(conn, 'client_is_speaking', False):
-                        # only auto-force-stop if currently not actively in voice OR time since last voice >= VAD_FORCE_EOS_MS
-                        now_auto = int(time.time() * 1000)
-                        last_voice_auto = getattr(conn, 'last_voice_ms', None)
-                        # Time-based force EoS is disabled in code (always 0)
-                        try:
-                            force_ms = 0
-                        except Exception:
-                            force_ms = 0
-                        allow_auto = False
-                        try:
-                            # Only allow auto-flush when consecutive silence frames reached.
-                            # Time-based expiry is disabled (force_ms=0)
-                            allow_auto = getattr(conn, 'vad_consecutive_silence', 0) >= int(os.getenv('VAD_SILENCE_FRAMES', '5'))
-                        except Exception:
-                            allow_auto = False
-
-                        if allow_auto:
-                            conn.client_voice_stop = True
-                            conn._stop_cause = 'auto_buffer_threshold'
-                            if audio_trace:
-                                logger.bind(tag=TAG).info(f"[AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} auto_force_stop by buffer ({total_len_estimated_now} >= {min_pcm_bytes_auto}) cond=allow_auto")
-                except Exception:
-                    pass
-            except Exception:
-                pass
-        # Do not trim audio during pre-voice; let VAD decide when enough voice has arrived
+        conn.asr_audio.append(audio)
         if not have_voice and not conn.client_have_voice:
+            conn.asr_audio = conn.asr_audio[-10:]
             return
 
         if conn.client_voice_stop:
-            # Guard: ignore premature stop if accumulated audio is too small
-            try:
-                min_pcm_bytes = int(
-                    (conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000"))
-                )
-            except Exception:
-                min_pcm_bytes = 12000
-
-            if conn.audio_format == "pcm":
-                # actual PCM bytes stored
-                total_len_estimated = sum(len(x) for x in conn.asr_audio)
-            else:
-                # conn.asr_audio holds Opus frames; estimate PCM bytes the same way
-                # as the per-chunk trace (frames * 1920)
-                total_len_estimated = len(conn.asr_audio) * 1920
-
-            if total_len_estimated < min_pcm_bytes:
-                if audio_trace:
-                    logger.bind(tag=TAG).info(
-                        f"※ここを見せて※ [AUDIO_TRACE] Early stop ignored: too small buffer ({total_len_estimated} < {min_pcm_bytes}), keep accumulating ※ここを見せて※"
-                    )
-                # Debug: show buffer contents summary
-                try:
-                    logger.bind(tag=TAG).info(f"※ここを送って※ [DBG_BUF] frames={len(conn.asr_audio)} est_pcm={total_len_estimated} session={getattr(conn,'session_id',None)}")
-                except Exception:
-                    pass
-                # Simply drop the stop signal and continue accumulating
-                conn.client_voice_stop = False
-                # Suppress silence counting until next real voice arrives to avoid immediate re-trigger
-                try:
-                    conn._suppress_silence_count_until_voice = True
-                except Exception:
-                    pass
-                return
-
-            # Proceed with normal flush
             asr_audio_task = conn.asr_audio.copy()
             conn.asr_audio.clear()
             conn.reset_vad_states()
 
-            if len(asr_audio_task) > 0:
+            if len(asr_audio_task) > 15:
                 await self.handle_voice_stop(conn, asr_audio_task)
-            conn.client_voice_stop = False
 
     # 处理语音停止
     async def handle_voice_stop(self, conn, asr_audio_task: List[bytes]):
@@ -224,20 +84,6 @@ class ASRProviderBase(ABC):
                 pcm_data = self.decode_opus(asr_audio_task)
             
             combined_pcm_data = b"".join(pcm_data)
-            try:
-                stop_cause = getattr(conn, "_stop_cause", None)
-                logger.bind(tag=TAG).info(
-                    f"※ここを見せて※ [AUDIO_TRACE] UTT#{getattr(conn,'utt_seq',0)} flush: cause={stop_cause}, frames={len(asr_audio_task)}, pcm_bytes={len(combined_pcm_data)} ※ここを見せて※"
-                )
-            except Exception:
-                pass
-            # 追加デバッグ: flush直前詳細 (※ここを送って※ を送ってください)
-            try:
-                logger.bind(tag=TAG).info(
-                    f"※ここを送って※ [ASR_DBG] flush_ready stop_cause={stop_cause} frames={len(asr_audio_task)} pcm_bytes={len(combined_pcm_data)} session_id={getattr(conn,'session_id',None)} asr_audio_queue_size={getattr(conn,'asr_audio_queue').qsize() if getattr(conn,'asr_audio_queue',None) else 'NA'}"
-                )
-            except Exception:
-                pass
             
             # 预先准备WAV数据
             wav_data = None
@@ -253,47 +99,11 @@ class ASRProviderBase(ABC):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        # 送信ガード：極小/空の音声は送らない（config優先, envフォールバック）
-                        try:
-                            min_pcm_bytes = int(
-                                (conn.config or {}).get("asr_min_pcm_bytes", os.getenv("ASR_MIN_PCM_BYTES", "12000"))
-                            )
-                        except Exception:
-                            min_pcm_bytes = 12000
-                        if conn.audio_format == "pcm":
-                            total_len = sum(len(x) for x in asr_audio_task)
-                        else:
-                            # 粗い推定：Opus→PCMの目安（各フレームを960サンプル相当として計算）
-                            total_len = len(asr_audio_task) * 1920  # 16-bit mono 960 samples
-                        # デバッグ: ASR送信判断値 (※ここを送って※ を送ってください)
-                        try:
-                            logger.bind(tag=TAG).info(
-                                f"※ここを送って※ [ASR_DBG] stop_check total_len={total_len} min_pcm_bytes={min_pcm_bytes} frames={len(asr_audio_task)} client_voice_stop={getattr(conn,'client_voice_stop',False)} asr_audio_frames_stored={len(getattr(conn,'asr_audio',[]))} session_id={getattr(conn,'session_id',None)}"
-                            )
-                        except Exception:
-                            pass
-                        try:
-                            # ※ここを送って※: snapshot before ASR send
-                            logger.bind(tag=TAG).info(f"※ここを送って※ [ASR_SNAP] total_len={total_len} min_pcm={min_pcm_bytes} frames={len(asr_audio_task)} session={getattr(conn,'session_id',None)} client_voice_stop={getattr(conn,'client_voice_stop',False)}")
-                        except Exception:
-                            pass
-                        if total_len < min_pcm_bytes:
-                            logger.bind(tag=TAG).info(
-                                f"Skip ASR: too small audio ({total_len} bytes < {min_pcm_bytes})"
-                            )
-                            return ("", None)
-
                         result = loop.run_until_complete(
                             self.speech_to_text(asr_audio_task, conn.session_id, conn.audio_format)
                         )
                         end_time = time.monotonic()
                         logger.bind(tag=TAG).info(f"ASR耗时: {end_time - start_time:.3f}s")
-                        try:
-                            # ※ここを送って※: ASR result debug
-                            raw_text, file_path = result if isinstance(result, tuple) else (result, None)
-                            logger.bind(tag=TAG).info(f"※ここを送って※ [ASR_RES] text='{raw_text}' file={file_path} frames={len(asr_audio_task)} est_pcm={len(asr_audio_task)*1920}")
-                        except Exception:
-                            pass
                         return result
                     finally:
                         loop.close()
@@ -331,12 +141,12 @@ class ASRProviderBase(ABC):
                     voiceprint_future = thread_executor.submit(run_voiceprint)
                     
                     # 等待两个线程都完成
-                    asr_result = asr_future.result(timeout=30)  # 15秒→30秒に延長
+                    asr_result = asr_future.result(timeout=15)
                     voiceprint_result = voiceprint_future.result(timeout=15)
                     
                     results = {"asr": asr_result, "voiceprint": voiceprint_result}
                 else:
-                    asr_result = asr_future.result(timeout=30)  # 15秒→30秒に延長
+                    asr_result = asr_future.result(timeout=15)
                     results = {"asr": asr_result, "voiceprint": None}
             
             
@@ -357,133 +167,14 @@ class ASRProviderBase(ABC):
             # 检查文本长度
             text_len, _ = remove_punctuation_and_length(raw_text)
             self.stop_ws_connection()
-
-            # 空文字のときは何も発話しない（独自自動セリフを停止）
-            if text_len == 0:
-                logger.bind(tag=TAG).info("ASR结果为空，无输出")
-                return
-
+            
             if text_len > 0:
                 # 构建包含说话人信息的JSON字符串
                 enhanced_text = self._build_enhanced_text(raw_text, speaker_name)
-
-                # サニタイズ：タグやJSONが混入している場合は除去してから送る
-                try:
-                    from core.utils.text_sanitize import sanitize_for_tts
-                    enhanced_text = sanitize_for_tts(enhanced_text)
-                except Exception:
-                    pass
-
-                # ASR 正規化: 辞書による置換を行う
-                try:
-                    from core.utils.text_sanitize import normalize_asr_text
-                    enhanced_text = normalize_asr_text(enhanced_text)
-                except Exception:
-                    pass
-
+                
                 # 使用自定义模块进行上报
-                # memory trigger handling: only query memory when user asks (e.g., "覚えてる/教えて/思い出して")
-                try:
-                    from core.utils.memory_utils import check_trigger_and_topic
-                    trig = check_trigger_and_topic(enhanced_text)
-                    if trig and getattr(conn, 'memory', None) is not None:
-                        trigger_word, topic = trig
-                        # If topic known, query memory for that topic
-                        query_text = topic if topic else enhanced_text
-                        try:
-                            future = asyncio.run_coroutine_threadsafe(
-                                conn.memory.query_memory(query_text), conn.loop
-                            )
-                            mem_res = future.result(timeout=1)
-                        except Exception:
-                            mem_res = None
-
-                        # mem_res is the stored short_memory summary (JSON or text)
-                        # If multiple candidates exist, our memory provider currently returns a summary.
-                        # We'll just prepend mem_res when present; further disambiguation UI can be added later.
-                        if mem_res:
-                            enhanced_with_memory = f"[MEMORY]{mem_res}\n{enhanced_text}"
-                        else:
-                            enhanced_with_memory = enhanced_text
-                    else:
-                        enhanced_with_memory = enhanced_text
-                except Exception:
-                    enhanced_with_memory = enhanced_text
-
-                await startToChat(conn, enhanced_with_memory)
+                await startToChat(conn, enhanced_text)
                 enqueue_asr_report(conn, enhanced_text, asr_audio_task)
-                # --- quick save: immediate single-entry save to manager API (non-blocking)
-                # Controlled by env QUICK_SAVE (default off). Set QUICK_SAVE=1 to enable.
-                try:
-                    if os.getenv('QUICK_SAVE', '0') == '1':
-                        try:
-                            from config.manage_api_client import save_mem_local_short_with_token
-
-                            def _quick_save():
-                                try:
-                                    # try to forward device JWT if available in connection headers
-                                    token = None
-                                    try:
-                                        # common header names
-                                        token = (conn.headers.get('authorization') or conn.headers.get('Authorization') or conn.headers.get('x-auth-token') or conn.headers.get('x-access-token'))
-                                        if isinstance(token, str) and token.startswith('Bearer '):
-                                            token = token.replace('Bearer ', '', 1)
-                                    except Exception:
-                                        token = None
-
-                                    res = save_mem_local_short_with_token(getattr(conn, 'device_id', None), enhanced_text, token=token)
-                                    if res is None:
-                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: no response for {getattr(conn,'device_id',None)} token={'present' if token else 'none'})")
-                                    else:
-                                        conn.logger.bind(tag=TAG).info(f"[MEM_SAVE] quick save: ok for {getattr(conn,'device_id',None)} token={'present' if token else 'none'})")
-                                except Exception as e:
-                                    try:
-                                        conn.logger.bind(tag=TAG).error(f"[MEM_SAVE] quick save error: {e}")
-                                    except Exception:
-                                        pass
-
-                            def _quick_save_with_fallback():
-                                try:
-                                    _quick_save()
-                                except Exception as e:
-                                    try:
-                                        conn.logger.bind(tag=TAG).warning(f"[MEM_SAVE] quick save failed, falling back to local file: {e}")
-                                        # fallback: use internal save to file
-                                        if getattr(conn, 'memory', None) is not None:
-                                            def _save_local():
-                                                try:
-                                                    loop = asyncio.new_event_loop()
-                                                    asyncio.set_event_loop(loop)
-                                                    loop.run_until_complete(conn.memory.save_memory([enhanced_text]))
-                                                    loop.close()
-                                                except Exception:
-                                                    pass
-
-                                            threading.Thread(target=_save_local, daemon=True).start()
-                                    except Exception:
-                                        pass
-
-                            threading.Thread(target=_quick_save_with_fallback, daemon=True).start()
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-
-                # --- save to memory asynchronously (do not block main thread) ---
-                try:
-                    if getattr(conn, 'memory', None) is not None:
-                        def _save():
-                            try:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                loop.run_until_complete(conn.memory.save_memory([enhanced_text]))
-                                loop.close()
-                            except Exception:
-                                pass
-
-                        threading.Thread(target=_save, daemon=True).start()
-                except Exception:
-                    pass
                 
         except Exception as e:
             logger.bind(tag=TAG).error(f"处理语音停止失败: {e}")

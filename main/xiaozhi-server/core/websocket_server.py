@@ -1,12 +1,10 @@
 import asyncio
 import websockets
-import json
 from config.logger import setup_logging
 from core.connection import ConnectionHandler
 from config.config_loader import get_config_from_api
 from core.utils.modules_initialize import initialize_modules
 from core.utils.util import check_vad_update, check_asr_update
-import os
 
 TAG = __name__
 
@@ -16,15 +14,11 @@ class WebSocketServer:
         self.config = config
         self.logger = setup_logging()
         self.config_lock = asyncio.Lock()
-        # Railwayでは起動を速くするためASRは遅延初期化
-        on_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_ENVIRONMENT"))
-        init_asr_now = not on_railway
-        init_vad_now = not on_railway
         modules = initialize_modules(
             self.logger,
             self.config,
-            ("VAD" in self.config["selected_module"]) and init_vad_now,
-            init_asr_now,
+            "VAD" in self.config["selected_module"],
+            "ASR" in self.config["selected_module"],
             "LLM" in self.config["selected_module"],
             False,
             "Memory" in self.config["selected_module"],
@@ -38,50 +32,13 @@ class WebSocketServer:
 
         self.active_connections = set()
 
-    def _ensure_asr_initialized(self):
-        if self._asr is None:
-            modules = initialize_modules(
-                self.logger,
-                self.config,
-                False,
-                True,
-                False,
-                False,
-                False,
-                False,
-            )
-            if "asr" in modules:
-                self._asr = modules["asr"]
-
-    def _ensure_vad_initialized(self):
-        if self._vad is None:
-            modules = initialize_modules(
-                self.logger,
-                self.config,
-                True,
-                False,
-                False,
-                False,
-                False,
-                False,
-            )
-            if "vad" in modules:
-                self._vad = modules["vad"]
-
     async def start(self):
         server_config = self.config["server"]
         host = server_config.get("ip", "0.0.0.0")
         port = int(server_config.get("port", 8000))
 
         async with websockets.serve(
-            self._handle_connection,
-            host,
-            port,
-            process_request=self._http_response,
-            subprotocols=["v1", "xiaozhi-v1"],
-            ping_interval=5,
-            ping_timeout=30,
-            close_timeout=5,
+            self._handle_connection, host, port, process_request=self._http_response
         ):
             await asyncio.Future()
 
@@ -90,8 +47,8 @@ class WebSocketServer:
         # 创建ConnectionHandler时传入当前server实例
         handler = ConnectionHandler(
             self.config,
-            (self._vad or (self._ensure_vad_initialized() or self._vad)),
-            (self._asr or (self._ensure_asr_initialized() or self._asr)),
+            self._vad,
+            self._asr,
             self._llm,
             self._memory,
             self._intent,
@@ -120,60 +77,14 @@ class WebSocketServer:
                     f"服务器端强制关闭连接时出错: {close_error}"
                 )
 
-    async def _http_response(self, *args, **kwargs):
-        # Support websockets process_request signatures across versions:
-        # - (path, request_headers)
-        # - (websocket, request_headers) with websocket.respond(...)
-        if len(args) >= 2 and isinstance(args[0], str):
-            path = args[0]
-            request_headers = args[1]
-            use_tuple = True
+    async def _http_response(self, websocket, request_headers):
+        # 检查是否为 WebSocket 升级请求
+        if request_headers.headers.get("connection", "").lower() == "upgrade":
+            # 如果是 WebSocket 请求，返回 None 允许握手继续
+            return None
         else:
-            websocket = args[0]
-            request_headers = args[1]
-            # derive path if available
-            path = kwargs.get("path", "/")
-            use_tuple = False
-        # 非WSのHTTPヘルスチェック/OTA応答をここで返す
-        # WebSocketハンドシェイク以外のリクエストはここに来る
-        try:
-            connection_hdr = request_headers.get("Connection", "").lower()
-            upgrade_hdr = request_headers.get("Upgrade", "").lower()
-            if "upgrade" in connection_hdr or upgrade_hdr == "websocket":
-                return None  # WSはそのまま続行
-
-            host = request_headers.get("Host", "localhost")
-            scheme = "https"  # RailwayはTLS終端
-
-            # どのパスでもヘルス用JSONを返す（Railway/プリフライト用）
-            return_json = {
-                "firmware": {"version": "1.6.8", "url": ""},
-                "websocket": {"endpoint": f"{scheme}://{host}", "port": 443},
-                "xiaozhi_websocket": {
-                    "ws_url": f"wss://{host}/xiaozhi/v1/",
-                    "ws_protocol": "v1",
-                    "protocol_version": 1,
-                    "origin": f"{scheme}://{host}",
-                },
-            }
-            body = json.dumps(return_json, separators=(",", ":")).encode("utf-8")
-            headers = [
-                ("Content-Type", "application/json"),
-                ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Allow-Headers", "*"),
-                ("Access-Control-Allow-Methods", "GET,POST,OPTIONS"),
-            ]
-            if use_tuple:
-                return 200, headers, body
-            else:
-                return await websocket.respond(200, body=body, headers=headers)
-        except Exception:
-            body = b"Internal Server Error\n"
-            headers = [("Content-Type", "text/plain; charset=utf-8")]
-            if use_tuple:
-                return 500, headers, body
-            else:
-                return await websocket.respond(500, body=body, headers=headers)
+            # 如果是普通 HTTP 请求，返回 "server is running"
+            return websocket.respond(200, "Server is running\n")
 
     async def update_config(self) -> bool:
         """更新服务器配置并重新初始化组件
